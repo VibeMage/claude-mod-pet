@@ -1,0 +1,21 @@
+{
+  "name": "pixipet",
+  "version": "0.1.0",
+  "description": "A pixel pet that lives in Claude Code: it watches what Claude is doing, grows with Claude's work and keeps you company",
+  "author": {
+    "name": "VibeMage",
+    "url": "https://github.com/VibeMage"
+  },
+  "homepage": "https://github.com/VibeMage/claude-mod-pet",
+  "repository": "https://github.com/VibeMage/claude-mod-pet",
+  "license": "MIT",
+  "keywords": [
+    "mod",
+    "pet",
+    "virtual-pet",
+    "companion",
+    "activity"
+  ],
+  "types": "./types/index.d.ts",
+  "displayName": "Pixipet"
+}

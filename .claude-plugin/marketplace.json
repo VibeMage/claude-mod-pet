@@ -1,0 +1,25 @@
+{
+  "name": "claude-mod-pet",
+  "owner": {
+    "name": "VibeMage"
+  },
+  "metadata": {
+    "description": "pixipet: a pixel pet for Claude Code that watches what Claude is doing, written as a Claude Code mod",
+    "version": "0.1.0"
+  },
+  "plugins": [
+    {
+      "name": "pixipet",
+      "source": "./",
+      "description": "A Tamagotchi-style pet that watches what Claude is doing, grows with Claude's work and keeps you company.",
+      "category": "fun",
+      "tags": [
+        "mod",
+        "pet",
+        "tamagotchi",
+        "companion",
+        "activity"
+      ]
+    }
+  ]
+}

@@ -1,7 +1,7 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
-import type { Activity, BandMode, LogEntry, Pet, Place, Skin } from '../types'
+import type { Activity, BandMode, LangWanted, LogEntry, Pet, Place, Skin, View } from '../types'
 import {
   type Care,
   activityOf,
@@ -45,6 +45,9 @@ const speciesAtom = atom({ plugin: 'pixipet', key: 'species' } as const, DEFAULT
 const langAtom = atom({ plugin: 'pixipet', key: 'lang' } as const, 'zh' as Lang)
 const hasButtonsAtom = atom({ plugin: 'pixipet', key: 'hasButtons' } as const, true)
 const placeAtom = atom({ plugin: 'pixipet', key: 'place' } as const, 'above' as Place)
+const viewAtom = atom({ plugin: 'pixipet', key: 'view' } as const, 'pet' as View)
+const isConfirmingResetAtom = atom({ plugin: 'pixipet', key: 'isConfirmingReset' } as const, false)
+const langWantedAtom = atom({ plugin: 'pixipet', key: 'langWanted' } as const, 'auto' as LangWanted)
 
 type $ = EngineInterface
 
@@ -154,7 +157,15 @@ async function log($: $, text: string) {
   await update($, logAtom, list => [...list, { at, text }].slice(-30))
 }
 
+/**
+ * The status line carries the pet only while the band is hidden: with the
+ * band showing it would say the same thing twice.
+ */
 async function refreshStatus($: $) {
+  if ((await read($, bandModeAtom)) !== 'hidden') {
+    $.ui.status(undefined)
+    return
+  }
   const pet = snap.pet
   const t = tx()
   const mood = moodOf(pet, snap.activity.kind)
@@ -330,6 +341,161 @@ function careButtons(
   )
 }
 
+type PaneSite = Parameters<EngineInterface['ui']['resolve']>[0]
+
+/**
+ * The settings page: each setting a row of choices, the current one marked
+ * and tinted; the species a picker; the name a text field; a reset that asks
+ * twice. Every choice applies at once and is kept between sessions.
+ */
+async function drawSettings($: $, e: PaneSite, cols: number, c: Palette) {
+  const t = tx()
+  const o = t.settings
+  const els = $.ui.resolve(e)
+  const { Box, Text, Button } = els
+  const [band, place, hasButtons, hasKeys, skin, species, langWanted, isConfirming] = await Promise.all([
+    read($, bandModeAtom),
+    read($, placeAtom),
+    read($, hasButtonsAtom),
+    read($, hasKeysAtom),
+    read($, skinAtom),
+    read($, speciesAtom),
+    read($, langWantedAtom),
+    read($, isConfirmingResetAtom),
+  ])
+
+  // One row: the label, then a chip per choice
+  const row = <T extends string | boolean>(
+    key: string,
+    label: string,
+    choices: readonly (readonly [T, string])[],
+    current: T,
+    pick: (value: T) => unknown,
+  ) => (
+    <Box key={`row-${key}`} flexDirection="row">
+      <Box width={9} flexShrink={0}>
+        <Text color={c.sub}>{label}</Text>
+      </Box>
+      <Box flexDirection="row" gap={1} flexWrap="wrap">
+        {choices.map(([value, name]) => {
+          const isOn = value === current
+          return (
+            <Box key={`${key}-${String(value)}`} backgroundColor={isOn ? c.chip.sleep : undefined} paddingX={1}>
+              <Button
+                key={`set-${key}-${String(value)}`}
+                plain
+                dimColor={!isOn}
+                hover={{ color: c.pet }}
+                label={`${isOn ? '●' : '○'} ${name}`}
+                onPress={() => pick(value)}
+              />
+            </Box>
+          )
+        })}
+      </Box>
+    </Box>
+  )
+
+  const speciesRow =
+    'Select' in els ? (
+      <Box key="row-species" flexDirection="row">
+        <Box width={9} flexShrink={0}>
+          <Text color={c.sub}>{o.species}</Text>
+        </Box>
+        <els.Select
+          key="set-species"
+          value={species}
+          options={speciesIds().map(id => ({ value: id, label: speciesName(id) }))}
+          onSelect={id => setSpecies($, id)}
+        />
+      </Box>
+    ) : (
+      row('species', o.species, speciesIds().map(id => [id, speciesName(id)] as const), species, id => setSpecies($, id))
+    )
+
+  const nameRow =
+    'Input' in els ? (
+      <Box key="row-name" flexDirection="row">
+        <Box width={9} flexShrink={0}>
+          <Text color={c.sub}>{o.name}</Text>
+        </Box>
+        <els.Input
+          key="set-name"
+          value={snap.pet.name}
+          placeholder={o.namePlaceholder}
+          onSubmit={value => {
+            const name = short(value, 12)
+            if (name !== '') return rename($, name)
+          }}
+        />
+      </Box>
+    ) : null
+
+  return (
+    <Box flexDirection="column" width={cols} gap={0}>
+      <Box justifyContent="space-between" marginBottom={1}>
+        <Text bold color={c.pet}>
+          {o.title}
+        </Text>
+        <Box key="back-to-pet">
+          <Button
+            key="back"
+            plain
+            hotkey="b"
+            hover={{ color: c.pet }}
+            label={o.back}
+            onPress={async () => {
+              await update($, isConfirmingResetAtom, () => false)
+              await update($, viewAtom, () => 'pet')
+            }}
+          />
+        </Box>
+      </Box>
+      {speciesRow}
+      {row('place', o.place, [['above', o.above], ['below', o.below]] as const, place, v => setPlace($, v))}
+      {row('band', o.band, [['full', o.full], ['mini', o.mini], ['hidden', o.hidden]] as const, band, v => setBand($, v))}
+      {row('buttons', o.buttons, [[true, o.show], [false, o.hide]] as const, hasButtons, v => setButtons($, v))}
+      {row('keys', o.keys, [[true, o.on], [false, o.off]] as const, hasKeys, v => setKeys($, v))}
+      {row('skin', o.skin, [['color', o.color], ['lcd', o.lcd]] as const, skin, v => setSkin($, v))}
+      {row('lang', o.lang, [['zh', '中文'], ['en', 'English'], ['auto', o.auto]] as const, langWanted, v => setLang($, v))}
+      {nameRow}
+      <Box key="row-reset" flexDirection="row" marginTop={1}>
+        <Box width={9} flexShrink={0}>
+          <Text color={c.sub}>{o.reset}</Text>
+        </Box>
+        {isConfirming ? (
+          <Box flexDirection="row" gap={1}>
+            <Text color={c.red}>{o.resetSure} </Text>
+            <Box key="reset-yes" backgroundColor={c.chip.feed} paddingX={1}>
+              <Button
+                key="reset-confirm"
+                plain
+                hover={{ color: c.red }}
+                label={o.resetYes}
+                onPress={async () => {
+                  await resetPet($)
+                  await update($, isConfirmingResetAtom, () => false)
+                  await update($, viewAtom, () => 'pet')
+                }}
+              />
+            </Box>
+            <Box key="reset-no" paddingX={1}>
+              <Button key="reset-cancel" plain label={o.cancel} onPress={() => update($, isConfirmingResetAtom, () => false)} />
+            </Box>
+          </Box>
+        ) : (
+          <Box key="reset-ask" paddingX={1}>
+            <Button key="reset" plain dimColor hover={{ color: c.red }} label={o.resetAsk} onPress={() => update($, isConfirmingResetAtom, () => true)} />
+          </Box>
+        )}
+      </Box>
+      <Text dimColor wrap="wrap">
+        {o.hint}
+      </Text>
+    </Box>
+  )
+}
+
 /** A species' display name in the pet's language. */
 function speciesName(id: string): string {
   if (id === 'mochi') return tx().mochi.name
@@ -365,6 +531,96 @@ async function resolveLang($: $, wanted: unknown): Promise<Lang> {
   return 'en'
 }
 
+// ---- Settings: one function each, shared by the commands and the settings view ----
+
+const BAND_MODES: readonly BandMode[] = ['full', 'mini', 'hidden']
+const PLACES: readonly Place[] = ['above', 'below']
+const SKINS: readonly Skin[] = ['color', 'lcd']
+
+/** Every species id, the default first and mochi last. */
+function speciesIds(): string[] {
+  return [DEFAULT_SPECIES, ...SPECIES.map(sp => sp.id).filter(id => id !== DEFAULT_SPECIES), 'mochi']
+}
+
+async function setBand($: $, mode: BandMode) {
+  await update($, bandModeAtom, () => mode)
+  await $.store.set('bandMode', mode)
+  if (mode !== 'full') band = null
+  await refreshStatus($)
+  return mode
+}
+
+async function setPlace($: $, place: Place) {
+  await update($, placeAtom, () => place)
+  await $.store.set('place', place)
+  band = null
+  sent.clear()
+  return place
+}
+
+async function setButtons($: $, on: boolean) {
+  await update($, hasButtonsAtom, () => on)
+  await $.store.set('hasButtons', on)
+  return on
+}
+
+async function setKeys($: $, on: boolean) {
+  await update($, hasKeysAtom, () => on)
+  await $.store.set('hasKeys', on)
+  return on
+}
+
+async function setSkin($: $, skin: Skin) {
+  await update($, skinAtom, () => skin)
+  snap.skin = skin
+  await $.store.set('skin', skin)
+  sent.clear()
+  return skin
+}
+
+async function setSpecies($: $, id: string) {
+  await update($, speciesAtom, () => id)
+  snap.species = id
+  await $.store.set('species', id)
+  sent.clear()
+  return id
+}
+
+/** `auto` follows Claude Code's language setting, then the locale. */
+async function setLang($: $, wanted: 'zh' | 'en' | 'auto') {
+  await $.store.set('lang', wanted)
+  await update($, langWantedAtom, () => wanted)
+  snap.lang = await resolveLang($, wanted)
+  await update($, langAtom, () => snap.lang)
+  await $.command.register({ name: 'pet', description: tx().command })
+  // Retitle the pane only if it is open; never open it unasked
+  if (pane !== null) {
+    try {
+      await $.ui.open({ id: PANE, title: tx().paneTitle })
+    } catch {
+      // A retitle refused leaves the old title: nothing to undo
+    }
+  }
+  await refreshStatus($)
+  return snap.lang
+}
+
+async function rename($: $, name: string) {
+  await changePet($, p => ({ ...p, name }))
+  await save($)
+  await say($, tx().myName(name))
+  await refreshStatus($)
+}
+
+async function resetPet($: $) {
+  const now = await $.clock.now()
+  await changePet($, p => newPet(now, p.name))
+  await update($, logAtom, () => [])
+  await save($)
+  await log($, tx().newEgg)
+  await refreshStatus($)
+}
+
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     const now = await $.clock.now()
@@ -380,6 +636,7 @@ export const register: Register = on => {
     }
     snap.lang = await resolveLang($, wanted)
     await update($, langAtom, () => snap.lang)
+    if (wanted === 'zh' || wanted === 'en' || wanted === 'auto') await update($, langWantedAtom, () => wanted)
     const pet =
       held.value !== undefined ? decay(held.value, now) : decay(revive(saved, now, tx().defaultName), now, true)
     await changePet($, () => pet)
@@ -538,19 +795,20 @@ export const register: Register = on => {
 
   on('command.run', { command: 'pet' }, async ($, e) => {
     const [verb = '', ...rest] = e.args.trim().split(/\s+/)
+    const asked = rest[0]
     const cares: Record<string, Care> = {
       feed: 'feed',
       play: 'play',
       clean: 'clean',
       sleep: 'sleep',
       wake: 'sleep',
+      heal: 'heal',
+      medicine: 'heal',
       喂: 'feed',
       玩: 'play',
       洗: 'clean',
-      heal: 'heal',
-      medicine: 'heal',
-      药: 'heal',
       睡: 'sleep',
+      药: 'heal',
     }
     const what = cares[verb]
     if (what !== undefined) {
@@ -558,107 +816,48 @@ export const register: Register = on => {
       const speech = await read($, speechAtom)
       return { text: tx().says(snap.pet.name, speech?.text ?? '') }
     }
-    if (verb === 'name') {
-      const name = short(rest.join(' '), 12)
-      if (name === '') return { text: tx().nameUsage }
-      await changePet($, p => ({ ...p, name }))
-      await save($)
-      await say($, tx().myName(name))
-      await refreshStatus($)
-      return { text: tx().renamed(name) }
-    }
-    if (verb === 'band') {
-      const order: BandMode[] = ['full', 'mini', 'hidden']
-      const asked = rest[0]
-      let mode = 'full' as BandMode
-      await update($, bandModeAtom, m =>
-        (mode = order.includes(asked as BandMode) ? (asked as BandMode) : (order[(order.indexOf(m) + 1) % 3] ?? 'full')),
-      )
-      await $.store.set('bandMode', mode)
-      if (mode !== 'full') band = null
-      return { text: tx().band(mode) }
-    }
-    if (verb === 'species') {
-      const all = ['mochi', ...SPECIES.map(sp => sp.id)]
-      const asked = rest[0]
-      if (asked === undefined || !all.includes(asked)) {
-        const t = tx()
-        const list = [
-          ...SPECIES.map(sp => t.speciesLine(sp.id, speciesName(sp.id), speciesBlurb(sp.id), sp.id === DEFAULT_SPECIES)),
-          t.speciesLine('mochi', t.mochi.name, t.mochi.description, false),
-        ]
-        return { text: t.speciesUsage(list) }
+    // A setting named without a value turns to the next one
+    const next = <T,>(order: readonly T[], now: T, value: unknown): T =>
+      order.includes(value as T) ? (value as T) : (order[(order.indexOf(now) + 1) % order.length] as T)
+    const onOff = (value: unknown, now: boolean) => (value === 'on' ? true : value === 'off' ? false : !now)
+    switch (verb) {
+      case 'name': {
+        const name = short(rest.join(' '), 12)
+        if (name === '') return { text: tx().nameUsage }
+        await rename($, name)
+        return { text: tx().renamed(name) }
       }
-      await update($, speciesAtom, () => asked)
-      snap.species = asked
-      await $.store.set('species', asked)
-      sent.clear()
-      return { text: tx().became(snap.pet.name, speciesName(asked)) }
-    }
-    if (verb === 'lang') {
-      const asked = rest[0]
-      if (asked !== 'zh' && asked !== 'en' && asked !== 'auto') return { text: tx().langUsage }
-      await $.store.set('lang', asked)
-      snap.lang = await resolveLang($, asked)
-      await update($, langAtom, () => snap.lang)
-      await $.command.register({ name: 'pet', description: tx().command })
-      // Retitle the pane only if it is open; never open it unasked
-      if (pane !== null) {
-        try {
-          await $.ui.open({ id: PANE, title: tx().paneTitle })
-        } catch {
-          // A retitle refused leaves the old title: nothing to undo
+      case 'band':
+        return { text: tx().band(await setBand($, next(BAND_MODES, await read($, bandModeAtom), asked))) }
+      case 'place':
+        return { text: tx().place(await setPlace($, next(PLACES, await read($, placeAtom), asked))) }
+      case 'buttons':
+        return { text: tx().buttons(await setButtons($, onOff(asked, await read($, hasButtonsAtom)))) }
+      case 'keys':
+        return { text: tx().keys(await setKeys($, onOff(asked, await read($, hasKeysAtom)))) }
+      case 'skin':
+        return { text: tx().skin(await setSkin($, next(SKINS, await read($, skinAtom), asked))) }
+      case 'lang':
+        if (asked !== 'zh' && asked !== 'en' && asked !== 'auto') return { text: tx().langUsage }
+        return { text: tx().lang(await setLang($, asked)) }
+      case 'species': {
+        if (asked === undefined || !speciesIds().includes(asked)) {
+          const t = tx()
+          return { text: t.speciesUsage(speciesIds().map(id => t.speciesLine(id, speciesName(id), speciesBlurb(id), id === DEFAULT_SPECIES))) }
         }
+        await setSpecies($, asked)
+        return { text: tx().became(snap.pet.name, speciesName(asked)) }
       }
-      await refreshStatus($)
-      return { text: tx().lang(snap.lang) }
+      case 'reset':
+        if (asked !== 'confirm') return { text: tx().resetConfirm }
+        await resetPet($)
+        return { text: tx().eggReady }
+      case 'status':
+        return { text: tx().status(snap.pet, tx().stage[stageOf(snap.pet.xp)], describe(snap.activity, snap.lang)) }
     }
-    if (verb === 'place') {
-      const asked = rest[0]
-      let place = 'above' as Place
-      await update($, placeAtom, p => (place = asked === 'above' || asked === 'below' ? asked : p === 'above' ? 'below' : 'above'))
-      await $.store.set('place', place)
-      band = null
-      sent.clear()
-      return { text: tx().place(place) }
-    }
-    if (verb === 'buttons') {
-      const asked = rest[0]
-      let hasButtons = true
-      await update($, hasButtonsAtom, b => (hasButtons = asked === 'on' ? true : asked === 'off' ? false : !b))
-      await $.store.set('hasButtons', hasButtons)
-      return { text: tx().buttons(hasButtons) }
-    }
-    if (verb === 'keys') {
-      const asked = rest[0]
-      let hasKeys = true
-      await update($, hasKeysAtom, k => (hasKeys = asked === 'on' ? true : asked === 'off' ? false : !k))
-      await $.store.set('hasKeys', hasKeys)
-      return { text: tx().keys(hasKeys) }
-    }
-    if (verb === 'skin') {
-      const asked = rest[0]
-      let skin = 'color' as Skin
-      await update($, skinAtom, s => (skin = asked === 'lcd' || asked === 'color' ? asked : s === 'color' ? 'lcd' : 'color'))
-      snap.skin = skin
-      await $.store.set('skin', skin)
-      sent.clear()
-      return { text: tx().skin(skin) }
-    }
-    if (verb === 'reset') {
-      if (rest[0] !== 'confirm') return { text: tx().resetConfirm }
-      const now = await $.clock.now()
-      await changePet($, p => newPet(now, p.name))
-      await update($, logAtom, () => [])
-      await save($)
-      await log($, tx().newEgg)
-      await refreshStatus($)
-      return { text: tx().eggReady }
-    }
-    if (verb === 'status') {
-      const pet = snap.pet
-      return { text: tx().status(pet, tx().stage[stageOf(pet.xp)], describe(snap.activity, snap.lang)) }
-    }
+    // /pet opens the pane: care on its front, every setting behind ⚙ (/pet settings opens there)
+    await update($, viewAtom, () => (verb === 'settings' ? 'settings' : 'pet'))
+    await update($, isConfirmingResetAtom, () => false)
     const opened = await $.ui.open({ id: PANE, title: tx().paneTitle, focus: true })
     if (!opened.isPlaced) return { text: tx().tooNarrow }
     return {}
@@ -689,6 +888,10 @@ export const register: Register = on => {
     const room = Math.max(0, (e.viewport?.rows ?? 30) - 28)
 
     const { Box, Text, Button } = $.ui.resolve(e)
+    if ((await read($, viewAtom)) === 'settings') {
+      pane = null
+      return await drawSettings($, e, cols, c)
+    }
     let picture
     if (e.surface === 'terminal') {
       const { Raster } = $.ui.resolve(e)
@@ -722,10 +925,21 @@ export const register: Register = on => {
         <Box justifyContent="space-between">
           <Text bold color={c.pet}>
             {pet.name}
+            <Text dimColor>
+              {' '}
+              · {t.stage[stage]} · {ageText(pet, now, snap.lang)}
+            </Text>
           </Text>
-          <Text dimColor>
-            {t.stage[stage]} · {ageText(pet, now, snap.lang)}
-          </Text>
+          <Box key="open-settings">
+            <Button
+              key="settings"
+              plain
+              hotkey="o"
+              hover={{ color: c.pet }}
+              label={t.settings.open}
+              onPress={() => update($, viewAtom, () => 'settings')}
+            />
+          </Box>
         </Box>
         <Text color={c.yellow} wrap="truncate">
           {spoken ? `「${short(spoken, cols - 4)}」` : ' '}

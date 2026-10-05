@@ -88,6 +88,39 @@ type Text = {
   heal: string
   focused: string
   unfocused: string
+  /** The settings page in the pane. */
+  settings: {
+    open: string
+    title: string
+    back: string
+    species: string
+    place: string
+    band: string
+    buttons: string
+    keys: string
+    skin: string
+    lang: string
+    name: string
+    namePlaceholder: string
+    reset: string
+    resetAsk: string
+    resetSure: string
+    resetYes: string
+    cancel: string
+    above: string
+    below: string
+    full: string
+    mini: string
+    hidden: string
+    show: string
+    hide: string
+    on: string
+    off: string
+    color: string
+    lcd: string
+    auto: string
+    hint: string
+  }
   /** The band's short meter labels. */
   short: { fullness: string; happiness: string; energy: string }
 }
@@ -164,7 +197,7 @@ const zh: Text = {
   turnError: 'Claude 这一轮出错了',
   cheer: '别灰心，再试一次！',
   rolledOver: '(翻了个身)',
-  command: '电子宠物：打开面板，或 /pet feed|play|clean|sleep|heal|name|species|band|place|buttons|skin|keys|lang|status|reset',
+  command: '电子宠物：打开面板，照顾和设置都在里面',
   nameUsage: '用法：/pet name <名字>',
   renamed: name => `宠物改名为 ${name}`,
   myName: name => `我叫${name}啦！`,
@@ -216,6 +249,38 @@ const zh: Text = {
   focused: 'Tab 切换按钮 · Enter 按下 · Esc 回到输入框',
   unfocused: 'ctrl+x tab 选中面板后按字母键 · ctrl+x x 关闭',
   short: { fullness: '温饱', happiness: '心情', energy: '精力' },
+  settings: {
+    open: '⚙ 设置',
+    title: '⚙ 设置',
+    back: '← 返回',
+    species: '物种',
+    place: '位置',
+    band: '小栏',
+    buttons: '按钮',
+    keys: '数字键',
+    skin: '皮肤',
+    lang: '语言',
+    name: '名字',
+    namePlaceholder: '输入名字后回车',
+    reset: '重新开始',
+    resetAsk: '从蛋开始…',
+    resetSure: '确定吗？现在的宠物会变回一颗蛋',
+    resetYes: '确定',
+    cancel: '取消',
+    above: '输入框上方',
+    below: '输入框下方',
+    full: '像素',
+    mini: '精简',
+    hidden: '隐藏',
+    show: '显示',
+    hide: '隐藏',
+    on: '开',
+    off: '关',
+    color: '彩色',
+    lcd: '液晶',
+    auto: '自动',
+    hint: '点选项立即生效并保存。Tab 移动 · Enter 选择 · b 返回 · Esc 关闭面板',
+  },
 }
 
 const en: Text = {
@@ -290,7 +355,7 @@ const en: Text = {
   turnError: 'Claude hit an error this turn',
   cheer: "Don't give up, try again!",
   rolledOver: '(rolls over)',
-  command: 'Your pet: open the pane, or /pet feed|play|clean|sleep|heal|name|species|band|place|buttons|skin|keys|lang|status|reset',
+  command: 'Your pet: open its pane, where care and settings live',
   nameUsage: 'Usage: /pet name <name>',
   renamed: name => `Your pet is now called ${name}`,
   myName: name => `I'm ${name} now!`,
@@ -344,6 +409,38 @@ const en: Text = {
   focused: 'Tab moves · Enter presses · Esc back to the prompt',
   unfocused: 'ctrl+x tab to focus, then the letter keys · ctrl+x x closes',
   short: { fullness: 'Food', happiness: 'Mood', energy: 'Energy' },
+  settings: {
+    open: '⚙ Settings',
+    title: '⚙ Settings',
+    back: '← Back',
+    species: 'Species',
+    place: 'Place',
+    band: 'Band',
+    buttons: 'Buttons',
+    keys: 'Digits',
+    skin: 'Skin',
+    lang: 'Language',
+    name: 'Name',
+    namePlaceholder: 'Type a name, then Enter',
+    reset: 'Start over',
+    resetAsk: 'From an egg…',
+    resetSure: 'Sure? Your pet turns back into an egg',
+    resetYes: 'Yes',
+    cancel: 'Cancel',
+    above: 'Above',
+    below: 'Below',
+    full: 'Pixels',
+    mini: 'One line',
+    hidden: 'Hidden',
+    show: 'Show',
+    hide: 'Hide',
+    on: 'On',
+    off: 'Off',
+    color: 'Colour',
+    lcd: 'LCD',
+    auto: 'Auto',
+    hint: 'Choices apply and save at once. Tab moves · Enter picks · b back · Esc closes',
+  },
 }
 
 export const TEXT: Record<Lang, Text> = { zh, en }

@@ -17,7 +17,7 @@ A pixel creature drawn with half-block cells (two pixels per terminal cell), ani
 - **Bubbles show Claude's work.** A magnifier for reads and searches, a pencil for edits, a terminal for shell commands, a globe for the web, a list for plans, a mini pet for each subagent. A flashing red **!** when Claude is asking you something or waiting on a plan approval.
 - **It reacts.** Hops and a ✓ when a turn lands, a sweat drop when a tool fails, munching when fed, hearts when played with, Zs when asleep, a flash when it evolves. It wanders around while Claude is idle and comes home when Claude starts working.
 - **Speaks Chinese and English.** It follows Claude Code's `language` setting, then your locale; `/pet lang zh|en` picks one.
-- **Three places to see it:** a pixel band above the prompt, a pane (`/pet`), and the status line. On desktop and other surfaces without pixels it falls back to text.
+- **Where to see it:** a pixel band above the prompt (or under it), and a pane (`/pet`); with the band hidden, the status line carries its stats instead. On desktop and other surfaces without pixels it falls back to text.
 
 ## Install
 
@@ -31,6 +31,8 @@ Then start a new session (or run `/reload-plugins`) and type `/pet`.
 To try it for one session without installing: `git clone https://github.com/VibeMage/claude-mod-pet && claude --plugin-dir ./claude-mod-pet`.
 
 ## Commands
+
+Type `/pet` and everything is in its pane: care on the front, and **⚙ Settings** (press `o`) for species, placement, band, buttons, digit keys, skin, language, name and starting over, each a row of choices you click or Tab to. `/pet settings` opens straight there. The subcommands below are shortcuts for the same things.
 
 | Command | |
 | --- | --- |

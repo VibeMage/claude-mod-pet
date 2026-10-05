@@ -57,6 +57,12 @@ export type BandMode = 'full' | 'mini' | 'hidden'
 /** Where the band goes: above the prompt, or under it in the hint line. */
 export type Place = 'above' | 'below'
 
+/** The pane's page: the pet, or its settings. */
+export type View = 'pet' | 'settings'
+
+/** The language as chosen; `auto` follows the setting and the locale. */
+export type LangWanted = 'zh' | 'en' | 'auto'
+
 export type LogEntry = { at: number; text: string }
 
 declare module 'claude-code' {
@@ -78,6 +84,9 @@ declare module 'claude-code' {
       species: string
       /** The language the pet speaks. */
       lang: 'zh' | 'en'
+      langWanted: LangWanted
+      view: View
+      isConfirmingReset: boolean
     }
   }
 }

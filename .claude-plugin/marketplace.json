@@ -5,7 +5,7 @@
   },
   "metadata": {
     "description": "pixipet: a pixel pet for Claude Code that watches what Claude is doing, written as a Claude Code mod",
-    "version": "0.2.0"
+    "version": "0.3.0"
   },
   "plugins": [
     {

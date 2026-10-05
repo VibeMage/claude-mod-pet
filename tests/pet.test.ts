@@ -357,3 +357,46 @@ test('bedtime: it dozes off when tired or late at night, and gets up rested afte
   // Eggs never sleep
   expect(decay({ ...newPet(0), energy: 5 }, 30 * 60_000, false, night).isAsleep).toBe(false)
 })
+
+test('settings live in the pane: every choice is a chip, the species a picker, reset asks twice', async ($, on) => {
+  mock.clock(on, { now: NOON })
+  mock.store(on)
+  on('ui.open', () => ({ value: { isPlaced: true } }))
+  on('command.register', () => ({ value: { command: 'pet' } }))
+  on('ui.render', { component: 'AbovePrompt' }, ($, e) => $.ui.resolve(e).Box({}))
+  on('tool.call', () => ({ result: { ok: true } }) as never)
+  for (let i = 0; i < 12; i++) await $.tool.call({ tool: 'Read', file_path: `/tmp/f${i}.ts` } as never)
+
+  // The pet page has a way in
+  const front = await mountPane($, 'terminal')
+  expect((await front.find({ type: 'Button', key: 'settings' }))?.props.hotkey).toBe('o')
+  await front.press({ key: 'settings' })
+  expect(await front.find({ type: 'Select', key: 'set-species' })).toBeDefined()
+  await front.unmount()
+
+  const ui = await mountPane($, 'terminal')
+  expect((await ui.find({ type: 'Button', key: 'set-place-above' }))?.props.label).toBe('● 输入框上方')
+  await ui.press({ key: 'set-place-below' })
+  expect((await ui.find({ type: 'Button', key: 'set-place-below' }))?.props.label).toBe('● 输入框下方')
+  await ui.select({ key: 'set-species', value: 'tuck' })
+  expect((await ui.find({ type: 'Select', key: 'set-species' }))?.props.value).toBe('tuck')
+  await ui.press({ key: 'set-lang-en' })
+  expect(await ui.find({ type: 'Text', text: '⚙ Settings' })).toBeDefined()
+  await ui.input({ key: 'set-name', text: 'Boo' })
+
+  // Reset asks first, then starts over from an egg
+  await ui.press({ key: 'reset' })
+  expect(await ui.find({ type: 'Button', key: 'reset-confirm' })).toBeDefined()
+  await ui.press({ key: 'reset-cancel' })
+  expect(await ui.find({ type: 'Button', key: 'reset-confirm' })).toBeUndefined()
+  await ui.press({ key: 'back' })
+  expect(await ui.find({ type: 'Text', text: /Boo/ })).toBeDefined()
+  expect(await ui.find({ type: 'Raster', key: 'scene' })).toBeDefined()
+  await ui.unmount()
+
+  // /pet settings opens straight onto the settings page
+  await $.command.run({ command: 'pet', args: 'settings' } as never)
+  const direct = await mountPane($, 'desktop')
+  expect(await direct.find({ type: 'Select', key: 'set-species' })).toBeDefined()
+  await direct.unmount()
+})

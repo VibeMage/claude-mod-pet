@@ -17,5 +17,8 @@
     "activity"
   ],
   "types": "./types/index.d.ts",
-  "displayName": "Pixipet"
+  "displayName": "Pixipet",
+  "supportUrl": "https://github.com/VibeMage/claude-mod-pet/issues",
+  "documentationUrl": "https://github.com/VibeMage/claude-mod-pet#readme",
+  "privacyPolicyUrl": "https://github.com/VibeMage/claude-mod-pet#what-it-reads-stores-and-sends"
 }

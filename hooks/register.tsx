@@ -220,7 +220,7 @@ async function checkEvolve($: Engine, before: Pet, after: Pet) {
 
 // ---- The scene ----
 
-function scene(w: number, h: number, hasGround: boolean): Scene {
+function scene(w: number, height: number, hasGround: boolean): Scene {
   const pet = snap.pet
   const kind = snap.activity.kind
   const stage = stageOf(pet.xp)
@@ -230,7 +230,7 @@ function scene(w: number, h: number, hasGround: boolean): Scene {
   const piles = pet.poop > 0 ? 3 + pet.poop * 7 : 0
   const x = Math.round(margin + pos * Math.max(0, w - piles - 2 * margin))
   const hop = playing('hop')
-  const room = Math.max(0, h - (hasGround ? 2 : 1) - heightOf(stage, snap.species))
+  const room = Math.max(0, height - (hasGround ? 2 : 1) - heightOf(stage, snap.species))
   const lift = hop ? Math.min(room, HOP[(tick - hop.start) % HOP.length] ?? 0) : 0
   const eating = playing('eat') !== undefined
 
@@ -250,7 +250,7 @@ function scene(w: number, h: number, hasGround: boolean): Scene {
     mood: eating ? 'happy' : mood,
     tick,
     x,
-    ground: hasGround ? h - 2 : h - 1,
+    ground: hasGround ? height - 2 : height - 1,
     lift,
     facing,
     isWalking: Math.abs(target - pos) > 0.01 && lift === 0,

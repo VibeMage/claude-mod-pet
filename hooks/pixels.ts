@@ -65,17 +65,17 @@ const PALETTES: Record<Skin, Palette> = {
 
 export class Canvas {
   readonly px: Int32Array
-  constructor(readonly w: number, readonly h: number) {
-    this.px = new Int32Array(w * h).fill(-1)
+  constructor(readonly w: number, readonly height: number) {
+    this.px = new Int32Array(w * height).fill(-1)
   }
   get(x: number, y: number): number {
-    if (x < 0 || y < 0 || x >= this.w || y >= this.h) return -1
+    if (x < 0 || y < 0 || x >= this.w || y >= this.height) return -1
     return this.px[y * this.w + x] ?? -1
   }
   set(x: number, y: number, c: number) {
     x = Math.round(x)
     y = Math.round(y)
-    if (x < 0 || y < 0 || x >= this.w || y >= this.h) return
+    if (x < 0 || y < 0 || x >= this.w || y >= this.height) return
     this.px[y * this.w + x] = c
   }
 }
@@ -164,22 +164,22 @@ function drawIcon(c: Canvas, x: number, y: number, icon: Icon, p: Palette, tick:
 /** A rounded speech bubble 11×10 with a tail pointing down-left or down-right. */
 function drawBubble(c: Canvas, x: number, y: number, tailLeft: boolean, edge: number, fill: number) {
   const w = 11
-  const h = 9
-  for (let dy = 0; dy < h; dy++) {
+  const height = 9
+  for (let dy = 0; dy < height; dy++) {
     for (let dx = 0; dx < w; dx++) {
-      const corner = (dx === 0 || dx === w - 1) && (dy === 0 || dy === h - 1)
+      const corner = (dx === 0 || dx === w - 1) && (dy === 0 || dy === height - 1)
       if (corner) continue
-      const border = dx === 0 || dy === 0 || dx === w - 1 || dy === h - 1
+      const border = dx === 0 || dy === 0 || dx === w - 1 || dy === height - 1
       c.set(x + dx, y + dy, border ? edge : fill)
     }
   }
   const tx = tailLeft ? x + 2 : x + w - 3
-  c.set(tx, y + h - 1, fill)
-  c.set(tx + (tailLeft ? 1 : -1), y + h - 1, fill)
-  c.set(tx - (tailLeft ? 1 : -1), y + h - 1, edge)
-  c.set(tx - (tailLeft ? 1 : -1), y + h, edge)
-  c.set(tx - (tailLeft ? 2 : -2), y + h + 1, edge)
-  c.set(tx, y + h, edge)
+  c.set(tx, y + height - 1, fill)
+  c.set(tx + (tailLeft ? 1 : -1), y + height - 1, fill)
+  c.set(tx - (tailLeft ? 1 : -1), y + height - 1, edge)
+  c.set(tx - (tailLeft ? 1 : -1), y + height, edge)
+  c.set(tx - (tailLeft ? 2 : -2), y + height + 1, edge)
+  c.set(tx, y + height, edge)
 }
 
 // ---- The creature ----
@@ -436,15 +436,15 @@ function drawSpecies(c: Canvas, sp: Species, pose: Pose, p: Palette) {
   const useAlt =
     st.alt !== undefined && mood !== 'sleep' && (pose.isWalking ? Math.floor(tick / 2) % 2 === 1 : Math.floor(tick / 5) % 2 === 1)
   const rows = useAlt && st.alt !== undefined ? st.alt : st.body
-  const h = rows.length
+  const height = rows.length
   const w = rows[0]?.length ?? 0
   const flip = pose.facing === 'left'
   const left = Math.round(pose.x - w / 2)
-  const top = pose.ground - pose.lift - h + 1
+  const top = pose.ground - pose.lift - height + 1
   const flash = pose.isFlashing && tick % 2 === 0
   const letterAt = (bx: number, by: number) => rows[by]?.[flip ? w - 1 - bx : bx]
 
-  for (let by = 0; by < h; by++) {
+  for (let by = 0; by < height; by++) {
     for (let bx = 0; bx < w; bx++) {
       const l = letterAt(bx, by)
       if (l === undefined || l === '.') continue
@@ -528,15 +528,15 @@ export type Scene = Pose & {
   hasGround: boolean
 }
 
-export function render(w: number, h: number, s: Scene): Canvas {
+export function render(w: number, height: number, s: Scene): Canvas {
   const p = PALETTES[s.skin]
-  const c = new Canvas(w, h)
+  const c = new Canvas(w, height)
   if (p.bg !== null) c.px.fill(p.bg)
 
   if (s.hasGround) {
     for (let x = 0; x < w; x++) {
-      c.set(x, h - 1, p.ground)
-      if ((x * 7 + 3) % 11 === 0) c.set(x, h - 2, p.leaf)
+      c.set(x, height - 1, p.ground)
+      if ((x * 7 + 3) % 11 === 0) c.set(x, height - 2, p.leaf)
     }
   }
 
@@ -590,7 +590,7 @@ export function render(w: number, h: number, s: Scene): Canvas {
   // The bubble: right of the head where it fits, else left
   if (showBubble && icon !== null) {
     const bx = bubbleRight ? box.right + 2 : Math.max(0, box.left - 2 - bw)
-    const by = Math.max(0, Math.min(box.top - 4, h - 12))
+    const by = Math.max(0, Math.min(box.top - 4, height - 12))
     drawBubble(c, bx, by, bubbleRight, s.isAlert ? p.red : p.ink, s.isAlert ? p.red : p.paper)
     drawIcon(c, bx + 2, by + 1, icon, p, s.tick)
   }
@@ -601,9 +601,9 @@ const DEFAULT = 0x01000000
 const UPPER = 0x2580
 const LOWER = 0x2584
 
-/** Packs the canvas into RasterProps `cells`: `w` columns, `ceil(h/2)` rows. */
+/** Packs the canvas into RasterProps `cells`: `w` columns, `ceil(height/2)` rows. */
 export function toCells(c: Canvas): string {
-  const rows = Math.ceil(c.h / 2)
+  const rows = Math.ceil(c.height / 2)
   const words = new Uint32Array(c.w * rows * 3)
   let i = 0
   for (let r = 0; r < rows; r++) {

@@ -173,13 +173,13 @@ async function refreshStatus($: Engine) {
   $.ui.status(`${face(mood, 0)} ${pet.name} ${stats} · Claude ${describe(snap.activity, snap.lang)}`)
 }
 
-async function setActivity($: Engine, next: Partial<Activity>) {
+async function setActivity($: Engine, change: Partial<Activity>) {
   const now = await $.clock.now()
   const before = snap.activity
   let after: Activity | undefined
-  await update($, activityAtom, a => (after = { ...a, ...next, since: next.kind !== a.kind ? now : a.since }))
+  await update($, activityAtom, a => (after = { ...a, ...change, since: change.kind !== a.kind ? now : a.since }))
   snap.activity = after!
-  if (next.kind !== undefined && next.kind !== before.kind) await refreshStatus($)
+  if (change.kind !== undefined && change.kind !== before.kind) await refreshStatus($)
 }
 
 /** Applies care, says the answer, plays its animation, and persists. */
@@ -455,7 +455,7 @@ async function drawSettings($: Engine, e: PaneSite, cols: number, c: Palette) {
       {row('place', o.place, [['above', o.above], ['below', o.below]] as const, place, v => setPlace($, v))}
       {row('band', o.band, [['full', o.full], ['mini', o.mini], ['hidden', o.hidden]] as const, band, v => setBand($, v))}
       {row('buttons', o.buttons, [[true, o.show], [false, o.hide]] as const, hasButtons, v => setButtons($, v))}
-      {row('keys', o.keys, [[true, o.on], [false, o.off]] as const, hasKeys, v => setKeys($, v))}
+      {row('keys', o.keys, [[true, o.enabled], [false, o.disabled]] as const, hasKeys, v => setKeys($, v))}
       {row('skin', o.skin, [['color', o.color], ['lcd', o.lcd]] as const, skin, v => setSkin($, v))}
       {row('lang', o.lang, [['zh', '中文'], ['en', 'English'], ['auto', o.auto]] as const, langWanted, v => setLang($, v))}
       {nameRow}
@@ -551,16 +551,16 @@ async function setPlace($: Engine, place: Place) {
   return place
 }
 
-async function setButtons($: Engine, on: boolean) {
-  await update($, hasButtonsAtom, () => on)
-  await $.store.set('hasButtons', on)
-  return on
+async function setButtons($: Engine, isOn: boolean) {
+  await update($, hasButtonsAtom, () => isOn)
+  await $.store.set('hasButtons', isOn)
+  return isOn
 }
 
-async function setKeys($: Engine, on: boolean) {
-  await update($, hasKeysAtom, () => on)
-  await $.store.set('hasKeys', on)
-  return on
+async function setKeys($: Engine, isOn: boolean) {
+  await update($, hasKeysAtom, () => isOn)
+  await $.store.set('hasKeys', isOn)
+  return isOn
 }
 
 async function setSkin($: Engine, skin: Skin) {
@@ -810,7 +810,7 @@ export const register: Register = on => {
       return { text: tx().says(snap.pet.name, speech?.text ?? '') }
     }
     // A setting named without a value turns to the next one
-    const next = <T,>(order: readonly T[], now: T, value: unknown): T =>
+    const following = <T,>(order: readonly T[], now: T, value: unknown): T =>
       order.includes(value as T) ? (value as T) : (order[(order.indexOf(now) + 1) % order.length] as T)
     const onOff = (value: unknown, now: boolean) => (value === 'on' ? true : value === 'off' ? false : !now)
     switch (verb) {
@@ -821,15 +821,15 @@ export const register: Register = on => {
         return { text: tx().renamed(name) }
       }
       case 'band':
-        return { text: tx().band(await setBand($, next(BAND_MODES, await read($, bandModeAtom), asked))) }
+        return { text: tx().band(await setBand($, following(BAND_MODES, await read($, bandModeAtom), asked))) }
       case 'place':
-        return { text: tx().place(await setPlace($, next(PLACES, await read($, placeAtom), asked))) }
+        return { text: tx().place(await setPlace($, following(PLACES, await read($, placeAtom), asked))) }
       case 'buttons':
         return { text: tx().buttons(await setButtons($, onOff(asked, await read($, hasButtonsAtom)))) }
       case 'keys':
         return { text: tx().keys(await setKeys($, onOff(asked, await read($, hasKeysAtom)))) }
       case 'skin':
-        return { text: tx().skin(await setSkin($, next(SKINS, await read($, skinAtom), asked))) }
+        return { text: tx().skin(await setSkin($, following(SKINS, await read($, skinAtom), asked))) }
       case 'lang':
         if (asked !== 'zh' && asked !== 'en' && asked !== 'auto') return { text: tx().langUsage }
         return { text: tx().lang(await setLang($, asked)) }

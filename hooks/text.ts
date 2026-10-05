@@ -55,12 +55,12 @@ type Text = {
   speciesLine: (id: string, name: string, description: string, isDefault: boolean) => string
   mochi: { name: string; description: string }
   became: (pet: string, species: string) => string
-  keys: (on: boolean) => string
+  keys: (isOn: boolean) => string
   /** How to do a care action now: a digit while the band takes them, else the command. */
   how: (digit: string | null, command: string) => string
   /** A care command's answer: the pet's name and what it says. */
   says: (name: string, line: string) => string
-  buttons: (on: boolean) => string
+  buttons: (isOn: boolean) => string
   skin: (skin: Skin) => string
   lang: (lang: Lang) => string
   langUsage: string
@@ -114,8 +114,8 @@ type Text = {
     hidden: string
     show: string
     hide: string
-    on: string
-    off: string
+    enabled: string
+    disabled: string
     color: string
     lcd: string
     auto: string
@@ -211,14 +211,14 @@ const zh: Text = {
   speciesLine: (id, name, description, isDefault) => `${id}（${name}${isDefault ? '，默认' : ''}）：${description}`,
   mochi: { name: '团子', description: '最早的橙色圆团子' },
   became: (pet, species) => `${pet} 变成了${species}`,
-  keys: on =>
-    on
+  keys: isOn =>
+    isOn
       ? '数字快捷键已开启：输入框为空时按 1 喂食 · 2 玩耍 · 3 清洁 · 4 睡觉'
       : '数字快捷键已关闭：数字照常输入，按钮仍可用鼠标点（/pet keys on 重新开启）',
   how: (digit, command) => (digit === null ? `${command} ` : `按 ${digit} `),
   says: (name, line) => `${name}：${line}`,
-  buttons: on =>
-    on ? '小栏按钮已显示' : '小栏按钮已隐藏，数字快捷键也随之停用（/pet buttons on 恢复，也可以用 /pet feed 等命令）',
+  buttons: isOn =>
+    isOn ? '小栏按钮已显示' : '小栏按钮已隐藏，数字快捷键也随之停用（/pet buttons on 恢复，也可以用 /pet feed 等命令）',
   skin: skin => (skin === 'lcd' ? '换上了拓麻歌子液晶屏皮肤' : '换回了彩色皮肤'),
   lang: lang => (lang === 'zh' ? '已切换为中文' : 'Switched to English'),
   langUsage: '用法：/pet lang zh|en|auto（auto 跟随 Claude Code 的 language 设置）',
@@ -274,8 +274,8 @@ const zh: Text = {
     hidden: '隐藏',
     show: '显示',
     hide: '隐藏',
-    on: '开',
-    off: '关',
+    enabled: '开',
+    disabled: '关',
     color: '彩色',
     lcd: '液晶',
     auto: '自动',
@@ -369,14 +369,14 @@ const en: Text = {
   speciesLine: (id, name, description, isDefault) => `${id} (${name}${isDefault ? ', default' : ''}): ${description}`,
   mochi: { name: 'Mochi', description: 'the first design, a round orange blob' },
   became: (pet, species) => `${pet} is now a ${species}`,
-  keys: on =>
-    on
+  keys: isOn =>
+    isOn
       ? 'Digit keys on: in an empty prompt press 1 feed · 2 play · 3 clean · 4 sleep'
       : 'Digit keys off: digits type as usual, the buttons still take clicks (/pet keys on to turn back on)',
   how: (digit, command) => (digit === null ? command : `press ${digit}`),
   says: (name, line) => `${name}: ${line}`,
-  buttons: on =>
-    on
+  buttons: isOn =>
+    isOn
       ? 'Band buttons shown'
       : 'Band buttons hidden, and the digit keys with them (/pet buttons on to bring them back, or use /pet feed and friends)',
   skin: skin => (skin === 'lcd' ? 'Switched to the Tamagotchi LCD skin' : 'Back to the colour skin'),
@@ -434,8 +434,8 @@ const en: Text = {
     hidden: 'Hidden',
     show: 'Show',
     hide: 'Hide',
-    on: 'On',
-    off: 'Off',
+    enabled: 'On',
+    disabled: 'Off',
     color: 'Colour',
     lcd: 'LCD',
     auto: 'Auto',

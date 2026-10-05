@@ -150,8 +150,8 @@ function drawIcon(c: Canvas, x: number, y: number, icon: Icon, p: Palette, tick:
     // Three dots filling in one by one
     const n = Math.floor(tick / 3) % 4
     for (let i = 0; i < 3; i++) {
-      const on = i < n
-      c.set(x + 1 + i * 2, y + 4, on ? p.ink : p.gray)
+      const isFilled = i < n
+      c.set(x + 1 + i * 2, y + 4, isFilled ? p.ink : p.gray)
     }
     return
   }
@@ -339,7 +339,7 @@ function drawFace(
 ) {
   const { mood, tick } = pose
   const blink = mood !== 'sleep' && tick % 25 === 24
-  const on = (x: number, y: number, color: number) => {
+  const dot = (x: number, y: number, color: number) => {
     x = Math.round(x)
     y = Math.round(y)
     if (canDraw(x, y)) c.set(x, y, color)
@@ -348,28 +348,28 @@ function drawFace(
 
   for (const [ex, ey] of eyes) {
     if (mood === 'sleep' || blink) {
-      on(ex, ey + 1, p.eye)
-      on(ex + 1, ey + 1, p.eye)
+      dot(ex, ey + 1, p.eye)
+      dot(ex + 1, ey + 1, p.eye)
     } else if (mood === 'happy') {
-      on(ex, ey + 1, p.eye)
-      on(ex + 1, ey, p.eye)
-      on(ex + 2, ey + 1, p.eye)
+      dot(ex, ey + 1, p.eye)
+      dot(ex + 1, ey, p.eye)
+      dot(ex + 2, ey + 1, p.eye)
     } else if (mood === 'sick') {
-      on(ex, ey, p.eye)
-      on(ex + 1, ey + 1, p.eye)
-      on(ex + 2, ey, p.eye)
+      dot(ex, ey, p.eye)
+      dot(ex + 1, ey + 1, p.eye)
+      dot(ex + 2, ey, p.eye)
     } else if (mood === 'focus') {
       // Half-closed, determined
-      on(ex, ey, p.shade)
-      on(ex + 1, ey, p.shade)
-      on(ex, ey + 1, p.eye)
-      on(ex + 1, ey + 1, p.eye)
+      dot(ex, ey, p.shade)
+      dot(ex + 1, ey, p.shade)
+      dot(ex, ey + 1, p.eye)
+      dot(ex + 1, ey + 1, p.eye)
     } else {
-      on(ex, ey, p.white)
-      on(ex, ey + 1, p.eye)
-      on(ex + 1, ey, p.eye)
-      on(ex + 1, ey + 1, p.eye)
-      if (mood === 'sad') on(ex, ey + 2, p.blue)
+      dot(ex, ey, p.white)
+      dot(ex, ey + 1, p.eye)
+      dot(ex + 1, ey, p.eye)
+      dot(ex + 1, ey + 1, p.eye)
+      if (mood === 'sad') dot(ex, ey + 2, p.blue)
     }
   }
 
@@ -377,39 +377,39 @@ function drawFace(
   if (mood === 'happy' || mood === 'normal' || mood === 'focus') {
     const first = eyes[0]
     const last = eyes[eyes.length - 1]
-    if (first !== undefined) on(first[0] - 1, ey + 2, p.blush)
-    if (last !== undefined) on(last[0] + 2, ey + 2, p.blush)
+    if (first !== undefined) dot(first[0] - 1, ey + 2, p.blush)
+    if (last !== undefined) dot(last[0] + 2, ey + 2, p.blush)
   }
 
   const [mx, my] = mouth
   if (pose.isEating) {
     const open = Math.floor(tick / 2) % 2 === 0
-    on(mx, my, p.eye)
-    on(mx + 1, my, p.eye)
+    dot(mx, my, p.eye)
+    dot(mx + 1, my, p.eye)
     if (open) {
-      on(mx, my + 1, p.red)
-      on(mx + 1, my + 1, p.eye)
+      dot(mx, my + 1, p.red)
+      dot(mx + 1, my + 1, p.eye)
     }
   } else if (mood === 'happy') {
-    on(mx - 1, my, p.eye)
-    on(mx, my + 1, p.eye)
-    on(mx + 1, my + 1, p.eye)
-    on(mx + 2, my, p.eye)
+    dot(mx - 1, my, p.eye)
+    dot(mx, my + 1, p.eye)
+    dot(mx + 1, my + 1, p.eye)
+    dot(mx + 2, my, p.eye)
   } else if (mood === 'sad' || mood === 'sick') {
-    on(mx - 1, my + 1, p.eye)
-    on(mx, my, p.eye)
-    on(mx + 1, my, p.eye)
-    on(mx + 2, my + 1, p.eye)
+    dot(mx - 1, my + 1, p.eye)
+    dot(mx, my, p.eye)
+    dot(mx + 1, my, p.eye)
+    dot(mx + 2, my + 1, p.eye)
   } else if (mood === 'hungry') {
-    on(mx, my, p.eye)
-    on(mx + 1, my, p.eye)
-    on(mx, my + 1, p.eye)
-    on(mx + 1, my + 1, p.eye)
+    dot(mx, my, p.eye)
+    dot(mx + 1, my, p.eye)
+    dot(mx, my + 1, p.eye)
+    dot(mx + 1, my + 1, p.eye)
   } else if (mood === 'sleep') {
-    on(mx + 1, my, p.eye)
+    dot(mx + 1, my, p.eye)
   } else {
-    on(mx, my, p.eye)
-    on(mx + 1, my, p.eye)
+    dot(mx, my, p.eye)
+    dot(mx + 1, my, p.eye)
   }
 }
 

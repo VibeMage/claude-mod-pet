@@ -37,6 +37,8 @@ export function newPet(now: number, name = TEXT.zh.defaultName): Pet {
     energy: 90,
     poop: 0,
     isAsleep: false,
+    isSick: false,
+    wokeAt: 0,
     lastTickAt: now,
     toolsSeen: 0,
     turnsSeen: 0,
@@ -49,35 +51,62 @@ export function revive(saved: unknown, now: number, name?: string): Pet {
   return { ...newPet(now, name), ...(saved as Partial<Pet>) }
 }
 
+/** Deep night: a pet goes to bed early then, and does not get up before 6. */
+export const isNight = (hour: number) => hour < 6
+
+/** How long a pet you woke stays up before it may doze off again. */
+const STAYS_UP = 30 * MINUTE
+
 /**
- * Time passing. Away from the keyboard decay is capped at 8 hours and never
- * drops a stat under 15, so coming back is never cruel.
+ * Time passing, ten minutes at a time, so a long absence plays out as it
+ * would have: the pet tires, dozes off, sleeps until rested, poops. Time away
+ * is capped at 8 hours and never drops a stat under 15, so coming back is
+ * never cruel. `hourOf` reads the local hour of a time (a parameter for tests).
  */
-export function decay(pet: Pet, now: number, isOffline = false): Pet {
+export function decay(
+  pet: Pet,
+  now: number,
+  isOffline = false,
+  hourOf: (at: number) => number = at => new Date(at).getHours(),
+): Pet {
   const minutes = Math.max(0, (now - pet.lastTickAt) / MINUTE)
   if (minutes < 1) return pet
-  const m = Math.min(minutes, 8 * 60)
   const floor = isOffline ? 15 : 0
-  // Never below the floor, unless it already was.
+  // Never below the floor, unless it already was
   const keep = (was: number, n: number) => clamp(Math.max(n, Math.min(was, floor)))
   const egg = stageOf(pet.xp) === 'egg'
-  const next: Pet = {
-    ...pet,
-    lastTickAt: now,
-    fullness: egg ? pet.fullness : keep(pet.fullness, pet.fullness - m * 0.4),
-    happiness: egg ? pet.happiness : keep(pet.happiness, pet.happiness - m * (pet.poop > 0 ? 0.5 : 0.25)),
-    energy: pet.isAsleep ? clamp(pet.energy + m * 2) : keep(pet.energy, pet.energy - m * 0.2),
+  // At most four piles, and three for time away
+  const most = isOffline ? Math.max(pet.poop, 3) : 4
+
+  let left = Math.min(minutes, 8 * 60)
+  let at = now - left * MINUTE
+  let p: Pet = { ...pet }
+  while (left > 0) {
+    const m = Math.min(10, left)
+    left -= m
+    at += m * MINUTE
+    if (!egg) {
+      p.fullness = keep(p.fullness, p.fullness - m * 0.4)
+      p.happiness = keep(p.happiness, p.happiness - m * ((p.poop > 0 ? 0.5 : 0.25) + (p.isSick ? 0.3 : 0)))
+    }
+    p.energy = p.isAsleep ? clamp(p.energy + m * 2) : keep(p.energy, p.energy - m * 0.2)
+    if (egg) continue
+    // Roughly one pile every 45 minutes awake
+    if (!p.isAsleep && Math.random() < m / 45) p.poop = Math.min(most, p.poop + 1)
+    // Three piles, or hungry and sad at once, make it sick until it takes medicine
+    if (p.poop >= 3 || (p.fullness < 15 && p.happiness < 15)) p.isSick = true
+    // Its own bedtime: tired, or sleepy late at night; up again once rested, after the night
+    const night = isNight(hourOf(at))
+    if (p.isAsleep) {
+      if (p.energy >= 100 && !night) p = { ...p, isAsleep: false }
+    } else if (at - (p.wokeAt ?? 0) >= STAYS_UP && (p.energy < 20 || (night && p.energy < 50))) {
+      p = { ...p, isAsleep: true }
+    }
   }
-  // Roughly one pile every 45 minutes awake, at most four.
-  if (!egg && !pet.isAsleep) {
-    const piles = Math.floor(m / 45) + (Math.random() < (m % 45) / 45 ? 1 : 0)
-    next.poop = Math.min(4, pet.poop + piles)
-  }
-  if (next.isAsleep && next.energy >= 100) next.isAsleep = false
-  return next
+  return { ...p, lastTickAt: now }
 }
 
-export type Care = 'feed' | 'play' | 'clean' | 'sleep'
+export type Care = 'feed' | 'play' | 'clean' | 'sleep' | 'heal'
 
 /** What the person did, and which line the pet answers with (hooks/text.ts has the words). */
 export function care(pet: Pet, what: Care): { pet: Pet; line: Line } {
@@ -88,6 +117,7 @@ export function care(pet: Pet, what: Care): { pet: Pet; line: Line } {
       if (pet.fullness >= 95) return { pet: { ...pet, happiness: clamp(pet.happiness - 3) }, line: 'full' }
       return { pet: { ...pet, fullness: clamp(pet.fullness + 25), happiness: clamp(pet.happiness + 3) }, line: 'fed' }
     case 'play':
+      if (pet.isSick) return { pet, line: 'sickPlay' }
       if (pet.energy < 15) return { pet, line: 'tired' }
       return {
         pet: {
@@ -101,6 +131,10 @@ export function care(pet: Pet, what: Care): { pet: Pet; line: Line } {
     case 'clean':
       if (pet.poop === 0) return { pet, line: 'clean' }
       return { pet: { ...pet, poop: 0, happiness: clamp(pet.happiness + 8) }, line: 'cleaned' }
+    case 'heal':
+      // The medicine tastes bitter
+      if (!pet.isSick) return { pet, line: 'healthy' }
+      return { pet: { ...pet, isSick: false, happiness: clamp(pet.happiness - 5) }, line: 'healed' }
     case 'sleep':
       return pet.isAsleep ? { pet: { ...pet, isAsleep: false }, line: 'wake' } : { pet: { ...pet, isAsleep: true }, line: 'night' }
   }
@@ -127,7 +161,7 @@ export type Mood = 'happy' | 'normal' | 'sad' | 'sick' | 'sleep' | 'focus' | 'hu
 
 export function moodOf(pet: Pet, activity: ActivityKind): Mood {
   if (pet.isAsleep) return 'sleep'
-  if (pet.poop >= 3 || (pet.fullness < 15 && pet.happiness < 15)) return 'sick'
+  if (pet.isSick) return 'sick'
   if (pet.fullness < 25) return 'hungry'
   if (pet.happiness < 30 || pet.energy < 15) return 'sad'
   if (isBusy(activity)) return 'focus'

@@ -15,6 +15,13 @@ a tail, a ghost or jelly, a tiny dragon, a seal, a mushroom sprite. Each grows
 through 4 stages (baby → child → teen → adult) with a visible progression.
 The egg is shared and already drawn; skip it.
 
+## Species so far
+
+`mochi` (round orange blob, drawn in code), `sprig` (cream chick with a leaf
+sprout), `mallow` (peach fox kit, the default) and `dewdrop` (teal dewdrop in a
+curly drop hat). New species should look and feel different from all four:
+another silhouette, another palette, another idea.
+
 ## Steps
 
 1. **Concept art first.** Generate one concept image per species showing the 4
@@ -22,7 +29,8 @@ The egg is shared and already drawn; skip it.
 2. **Pixel bitmaps.** Translate each concept into the contract in
    `hooks/species/types.ts` (read it: every field is documented). One file per
    species, `hooks/species/<id>.ts`, exporting a `Species` const; add it to
-   `SPECIES` in `hooks/species/index.ts`.
+   `SPECIES` in `hooks/species/index.ts`. Fill in `nameEn` and
+   `descriptionEn` too: the pet speaks English as well as Chinese.
 3. **Look at it.** `npx -y tsx scripts/preview.ts <id>` writes
    `docs/species/<id>.png`: rows are the stages, columns are moods and actions
    (normal, happy, focus, walk, sleep, sick, eat, LCD skin). Open the image and

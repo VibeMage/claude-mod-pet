@@ -1,7 +1,7 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
-import type { Activity, BandMode, LogEntry, Pet, Skin } from '../types'
+import type { Activity, BandMode, LogEntry, Pet, Place, Skin } from '../types'
 import {
   type Care,
   activityOf,
@@ -16,6 +16,7 @@ import {
   onTool,
   onToolError,
   onTurn,
+  pick,
   revive,
   short,
   stageOf,
@@ -43,15 +44,26 @@ const DEFAULT_SPECIES = 'mallow'
 const speciesAtom = atom({ plugin: 'pixipet', key: 'species' } as const, DEFAULT_SPECIES)
 const langAtom = atom({ plugin: 'pixipet', key: 'lang' } as const, 'zh' as Lang)
 const hasButtonsAtom = atom({ plugin: 'pixipet', key: 'hasButtons' } as const, true)
+const placeAtom = atom({ plugin: 'pixipet', key: 'place' } as const, 'above' as Place)
 
 type $ = EngineInterface
 
 /** iOS system colours, light or dark with the Claude Code theme. */
-type Palette = { pet: string; green: string; red: string; orange: string; teal: string; indigo: string; yellow: string; text: string; sub: string }
+type Palette = {
+  pet: string; green: string; red: string; orange: string; teal: string; indigo: string; yellow: string; text: string; sub: string
+  /** Soft backgrounds for the care buttons, one per action. */
+  chip: Record<Care, string>
+}
 
 const CUPERTINO: Record<'light' | 'dark', Palette> = {
-  light: { pet: '#d30f45', green: '#248a3d', red: '#d70015', orange: '#c93400', teal: '#0071a4', indigo: '#6155f5', yellow: '#b25000', text: '#1d1d1f', sub: '#6e6e73' },
-  dark: { pet: '#ff375f', green: '#4ad968', red: '#ff666a', orange: '#ffa056', teal: '#00d2e0', indigo: '#6d7cff', yellow: '#ffd600', text: '#f5f5f7', sub: '#98989f' },
+  light: {
+    pet: '#d30f45', green: '#248a3d', red: '#d70015', orange: '#c93400', teal: '#0071a4', indigo: '#6155f5', yellow: '#b25000', text: '#1d1d1f', sub: '#6e6e73',
+    chip: { feed: '#ffe0e6', play: '#dff3d8', clean: '#dbedfc', sleep: '#e7e4ff', heal: '#fff1cc' },
+  },
+  dark: {
+    pet: '#ff375f', green: '#4ad968', red: '#ff666a', orange: '#ffa056', teal: '#00d2e0', indigo: '#6d7cff', yellow: '#ffd600', text: '#f5f5f7', sub: '#98989f',
+    chip: { feed: '#4a2630', play: '#233f29', clean: '#1f3550', sleep: '#302b55', heal: '#4a3c18' },
+  },
 }
 
 // Read once per load: the render hooks run often.
@@ -121,9 +133,12 @@ async function save($: $) {
 async function hints($: $, text: string): Promise<string> {
   if (!text.includes('{')) return text
   const takesDigits =
-    (await read($, bandModeAtom)) !== 'hidden' && (await read($, hasButtonsAtom)) && (await read($, hasKeysAtom))
-  const digits: Record<Care, string> = { feed: '1', play: '2', clean: '3', sleep: '4' }
-  return text.replace(/\{(feed|play|clean|sleep)\}/g, (_, what: Care) =>
+    (await read($, bandModeAtom)) !== 'hidden' &&
+    (await read($, placeAtom)) === 'above' &&
+    (await read($, hasButtonsAtom)) &&
+    (await read($, hasKeysAtom))
+  const digits: Record<Care, string> = { feed: '1', play: '2', clean: '3', sleep: '4', heal: '5' }
+  return text.replace(/\{(feed|play|clean|sleep|heal)\}/g, (_, what: Care) =>
     tx().how(takesDigits ? digits[what] : null, `/pet ${what}`),
   )
 }
@@ -140,8 +155,11 @@ async function log($: $, text: string) {
 }
 
 async function refreshStatus($: $) {
-  const mood = moodOf(snap.pet, snap.activity.kind)
-  $.ui.status(`${face(mood, 0)} ${snap.pet.name} · Claude ${describe(snap.activity, snap.lang)}`)
+  const pet = snap.pet
+  const t = tx()
+  const mood = moodOf(pet, snap.activity.kind)
+  const stats = `${t.short.fullness} ${Math.round(pet.fullness)} ${t.short.happiness} ${Math.round(pet.happiness)} ${t.short.energy} ${Math.round(pet.energy)}`
+  $.ui.status(`${face(mood, 0)} ${pet.name} ${stats} · Claude ${describe(snap.activity, snap.lang)}`)
 }
 
 async function setActivity($: $, next: Partial<Activity>) {
@@ -156,7 +174,10 @@ async function setActivity($: $, next: Partial<Activity>) {
 /** Applies care, says the answer, plays its animation, and persists. */
 async function doCare($: $, what: Care) {
   const before = snap.pet
-  const { pet, line } = care(before, what)
+  const cared = care(before, what)
+  // Woken by hand, it stays up a while before dozing off again
+  const pet = before.isAsleep && !cared.pet.isAsleep ? { ...cared.pet, wokeAt: await $.clock.now() } : cared.pet
+  const line = cared.line
   await changePet($, () => pet)
   if (pet !== before) {
     if (what === 'feed') play('eat', 14)
@@ -165,6 +186,7 @@ async function doCare($: $, what: Care) {
       play('heart', 16)
     }
     if (what === 'clean') play('star', 10)
+    if (what === 'heal') play('star', 14)
   }
   await say($, careLine(snap.lang, line))
   await save($)
@@ -274,6 +296,40 @@ function paint($: $) {
   if (pane !== null) blit($, PANE, pane.columns, pane.rows, cellsFor(pane.columns, pane.rows, true))
 }
 
+type Elements = ReturnType<EngineInterface['ui']['resolve']>
+
+/**
+ * The four care actions as chips: a soft colour each, the hotkey in the
+ * accent colour, pink under the pointer. A keyed Box per chip scopes its hover.
+ */
+function careButtons(
+  Box: Elements['Box'],
+  Button: Elements['Button'],
+  c: Palette,
+  t: (typeof TEXT)[Lang],
+  pet: Pet,
+  hotkey: (what: Care) => { hotkey?: string },
+  onPress: (what: Care) => void,
+) {
+  const chips: [Care, string][] = [
+    ['feed', t.feed],
+    ['play', t.play],
+    ['clean', t.clean],
+    ['sleep', pet.isAsleep ? t.wake : t.sleep],
+  ]
+  // Medicine only while it is sick
+  if (pet.isSick) chips.push(['heal', t.heal])
+  return (
+    <Box flexDirection="row" gap={1} flexWrap="wrap">
+      {chips.map(([what, label]) => (
+        <Box key={`care-${what}`} backgroundColor={c.chip[what]} paddingX={1}>
+          <Button key={what} plain hover={{ color: c.pet }} {...hotkey(what)} label={label} onPress={() => onPress(what)} />
+        </Box>
+      ))}
+    </Box>
+  )
+}
+
 /** A species' display name in the pet's language. */
 function speciesName(id: string): string {
   if (id === 'mochi') return tx().mochi.name
@@ -338,6 +394,8 @@ export const register: Register = on => {
       if (typeof species === 'string' && (species === 'mochi' || speciesById(species))) {
         await update($, speciesAtom, () => species)
       }
+      const place = await $.store.get('place')
+      if (place === 'above' || place === 'below') await update($, placeAtom, () => place)
       const hasButtons = await $.store.get('hasButtons')
       if (typeof hasButtons === 'boolean') await update($, hasButtonsAtom, () => hasButtons)
       const hasKeys = await $.store.get('hasKeys')
@@ -363,6 +421,14 @@ export const register: Register = on => {
       const kind = snap.activity.kind
       const mood = moodOf(after, kind)
       if (after.poop > before.poop) await log($, tx().pooped(after.name))
+      if (after.isAsleep && !before.isAsleep) {
+        await log($, tx().dozedOff(after.name))
+        await say($, pick(tx().dozing), 10)
+      } else if (!after.isAsleep && before.isAsleep) {
+        await log($, tx().rested(after.name))
+        await say($, pick(tx().morning), 10)
+        play('hop', 8)
+      }
       if (mood === 'hungry' && moodOf(before, kind) !== 'hungry') {
         $.ui.toast(await hints($, tx().hungry(after.name)))
       }
@@ -481,6 +547,9 @@ export const register: Register = on => {
       喂: 'feed',
       玩: 'play',
       洗: 'clean',
+      heal: 'heal',
+      medicine: 'heal',
+      药: 'heal',
       睡: 'sleep',
     }
     const what = cares[verb]
@@ -543,6 +612,15 @@ export const register: Register = on => {
       }
       await refreshStatus($)
       return { text: tx().lang(snap.lang) }
+    }
+    if (verb === 'place') {
+      const asked = rest[0]
+      let place = 'above' as Place
+      await update($, placeAtom, p => (place = asked === 'above' || asked === 'below' ? asked : p === 'above' ? 'below' : 'above'))
+      await $.store.set('place', place)
+      band = null
+      sent.clear()
+      return { text: tx().place(place) }
     }
     if (verb === 'buttons') {
       const asked = rest[0]
@@ -691,11 +769,8 @@ export const register: Register = on => {
           </Box>
         )}
 
-        <Box flexDirection="row" gap={2} marginTop={1} flexWrap="wrap">
-          <Button key="feed" hotkey="f" plain label={t.feed} onPress={() => doCare($, 'feed')} />
-          <Button key="play" hotkey="p" plain label={t.play} onPress={() => doCare($, 'play')} />
-          <Button key="clean" hotkey="c" plain label={t.clean} onPress={() => doCare($, 'clean')} />
-          <Button key="sleep" hotkey="s" plain label={pet.isAsleep ? t.wake : t.sleep} onPress={() => doCare($, 'sleep')} />
+        <Box marginTop={1}>
+          {careButtons(Box, Button, c, t, pet, what => ({ hotkey: what[0]! }), what => doCare($, what))}
         </Box>
         {e.surface === 'terminal' && (
           <Text dimColor wrap="truncate">
@@ -709,118 +784,13 @@ export const register: Register = on => {
   })
 
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
-    const mode = await read($, bandModeAtom)
-    if (e.props.hasSurvey || mode === 'hidden') {
-      band = null
-      return next(e)
-    }
-    const pet = await read($, petAtom)
-    const activity = await read($, activityAtom)
-    const speech = await read($, speechAtom)
-    snap.skin = await read($, skinAtom)
-    snap.species = await read($, speciesAtom)
-    snap.lang = await read($, langAtom)
-    const t = TEXT[snap.lang]
-    snap.pet = pet
-    snap.activity = activity
-    const now = await $.clock.now()
-    const c = await palette($)
-    const mood = moodOf(pet, activity.kind)
-    const busy = isBusy(activity.kind)
-    const spoken = speech !== null && speech.until > now ? `「${speech.text}」` : ''
-    const toNext = nextStageIn(pet.xp)
-    const width = e.props.bodyColumns
-    const rows = 8
-    const isFull = mode === 'full' && e.surface === 'terminal' && e.props.maxRows >= rows && width >= 64
-
-    const hasKeys = await read($, hasKeysAtom)
-    const hasButtons = await read($, hasButtonsAtom)
+    if (e.props.hasSurvey || (await read($, placeAtom)) !== 'above') return next(e)
     const theirs = await next(e)
-    const { Box, Text, Button } = $.ui.resolve(e)
-    const actColor = activity.kind === 'asking' || activity.kind === 'approving' ? c.red : busy ? c.teal : c.sub
-
-    // A bare digit in an empty prompt presses a band Button: care without leaving the prompt
-    const key = (digit: string) => (hasKeys ? { hotkey: digit } : {})
-    const buttons = (
-      <Box flexDirection="row" gap={1} flexWrap="wrap">
-        <Box key="care-feed">
-          <Button key="feed" plain hover={{ color: c.pet }} {...key('1')} label={t.feed} onPress={() => doCare($, 'feed')} />
-        </Box>
-        <Box key="care-play">
-          <Button key="play" plain hover={{ color: c.pet }} {...key('2')} label={t.play} onPress={() => doCare($, 'play')} />
-        </Box>
-        <Box key="care-clean">
-          <Button key="clean" plain hover={{ color: c.pet }} {...key('3')} label={t.clean} onPress={() => doCare($, 'clean')} />
-        </Box>
-        <Box key="care-sleep">
-          <Button key="sleep" plain hover={{ color: c.pet }} {...key('4')} label={pet.isAsleep ? t.wake : t.sleep} onPress={() => doCare($, 'sleep')} />
-        </Box>
-      </Box>
-    )
-
-    let ours
-    if (isFull && e.surface === 'terminal') {
-      const { Raster } = $.ui.resolve(e)
-      const columns = width >= 90 ? 44 : Math.max(26, width - 46)
-      band = { id: e.requestId, columns, rows }
-      const cells = cellsFor(columns, rows, false)
-      sent.set(e.requestId, cells)
-      ours = (
-        <Box flexDirection="row">
-          <Raster key={RASTER} columns={columns} rows={rows} cells={cells} />
-          <Box flexDirection="column" justifyContent="flex-end" paddingLeft={1} width={Math.min(48, width - columns - 1)}>
-            <Text wrap="truncate">
-              <Text bold color={c.pet}>
-                {pet.name}
-              </Text>
-              <Text color={c.sub}>
-                {' '}
-                · {t.stage[stageOf(pet.xp)]} · {t.xp} {pet.xp}
-                {toNext === null ? '' : `/${pet.xp + toNext}`}
-              </Text>
-            </Text>
-            <Text wrap="truncate">
-              <Text color={c.sub}>{t.short.fullness} </Text>
-              <Text color={pet.fullness < 25 ? c.red : c.green}>{bar(pet.fullness)}</Text>
-              <Text color={c.sub}> {t.short.happiness} </Text>
-              <Text color={pet.happiness < 30 ? c.red : c.pet}>{bar(pet.happiness)}</Text>
-              <Text color={c.sub}> {t.short.energy} </Text>
-              <Text color={pet.energy < 15 ? c.red : c.teal}>{bar(pet.energy)}</Text>
-            </Text>
-            <Text color={actColor} wrap="wrap">
-              {busy ? '● ' : '○ '}Claude {describe(activity, snap.lang)}
-              {busy && activity.turnTools > 0 ? t.tools(activity.turnTools) : ''}
-            </Text>
-            <Text color={c.yellow} wrap="wrap">
-              {spoken || ' '}
-            </Text>
-            {hasButtons && buttons}
-          </Box>
-        </Box>
-      )
-    } else {
-      band = null
-      ours = (
-        <Box flexDirection="row" width={width}>
-          <Text color={c.pet} bold>
-            {stageOf(pet.xp) === 'egg' ? '(  .  )' : face(mood, 0)}{' '}
-          </Text>
-          <Text>{pet.name} </Text>
-          <Text color={pet.fullness < 25 ? c.red : c.green}>{t.short.fullness}{bar(pet.fullness, 4)} </Text>
-          <Text color={pet.happiness < 30 ? c.red : c.pet}>{t.short.happiness}{bar(pet.happiness, 4)} </Text>
-          <Text color={pet.energy < 15 ? c.red : c.teal}>{t.short.energy}{bar(pet.energy, 4)} </Text>
-          {pet.poop > 0 && <Text color={c.yellow}>{'@'.repeat(pet.poop)} </Text>}
-          {hasButtons && buttons}
-          {hasButtons && <Text> </Text>}
-          <Text color={actColor} wrap="truncate">
-            {spoken || `│ Claude ${describe(activity, snap.lang)}`}
-          </Text>
-        </Box>
-      )
-    }
-
+    const ours = await drawBand($, e, e.props.bodyColumns, e.props.maxRows, true)
+    if (ours === undefined) return theirs
     // Share the band with any other mod drawing there
     if (!theirs) return ours
+    const { Box } = $.ui.resolve(e)
     return (
       <Box flexDirection="column">
         {theirs}
@@ -828,6 +798,131 @@ export const register: Register = on => {
       </Box>
     )
   })
+
+  on('ui.render', { component: 'PromptHint' }, async ($, e, next) => {
+    if ((await read($, placeAtom)) !== 'below') return next(e)
+    const theirs = await next(e)
+    // The hint line has no measure of its own: the surface's width, less a margin
+    const ours = await drawBand($, e, Math.max(20, (e.viewport?.columns ?? 80) - 6), 12, false)
+    if (ours === undefined) return theirs
+    const { Box } = $.ui.resolve(e)
+    return (
+      <Box flexDirection="column">
+        {ours}
+        {theirs}
+      </Box>
+    )
+  })
+}
+
+type BandSite = Parameters<EngineInterface['ui']['resolve']>[0] & { requestId: string }
+
+/**
+ * The pet's band, above the prompt or under it: the pixel scene with the
+ * stats beside it, or one line of stats with the buttons under it. Digits
+ * press the buttons only above the prompt, where the engine arms them.
+ */
+async function drawBand($: $, e: BandSite, width: number, maxRows: number, takesDigits: boolean) {
+  const mode = await read($, bandModeAtom)
+  if (mode === 'hidden') {
+    band = null
+    return undefined
+  }
+  const pet = await read($, petAtom)
+  const activity = await read($, activityAtom)
+  const speech = await read($, speechAtom)
+  snap.skin = await read($, skinAtom)
+  snap.species = await read($, speciesAtom)
+  snap.lang = await read($, langAtom)
+  const t = TEXT[snap.lang]
+  snap.pet = pet
+  snap.activity = activity
+  const now = await $.clock.now()
+  const c = await palette($)
+  const mood = moodOf(pet, activity.kind)
+  const busy = isBusy(activity.kind)
+  const spoken = speech !== null && speech.until > now ? `「${speech.text}」` : ''
+  const toNext = nextStageIn(pet.xp)
+  const rows = 8
+  const isFull = mode === 'full' && e.surface === 'terminal' && maxRows >= rows && width >= 64
+
+  const hasKeys = takesDigits && (await read($, hasKeysAtom))
+  const hasButtons = await read($, hasButtonsAtom)
+  const { Box, Text, Button } = $.ui.resolve(e)
+  const actColor = activity.kind === 'asking' || activity.kind === 'approving' ? c.red : busy ? c.teal : c.sub
+
+  // A bare digit in an empty prompt presses a band Button: care without leaving the prompt
+  const digits: Record<Care, string> = { feed: '1', play: '2', clean: '3', sleep: '4', heal: '5' }
+  const buttons = careButtons(Box, Button, c, t, pet, what => (hasKeys ? { hotkey: digits[what] } : {}), what =>
+    doCare($, what),
+  )
+
+  if (isFull && e.surface === 'terminal') {
+    const { Raster } = $.ui.resolve(e)
+    const columns = width >= 90 ? 44 : Math.max(26, width - 46)
+    band = { id: e.requestId, columns, rows }
+    const cells = cellsFor(columns, rows, false)
+    sent.set(e.requestId, cells)
+    return (
+      <Box flexDirection="row">
+        <Raster key={RASTER} columns={columns} rows={rows} cells={cells} />
+        <Box flexDirection="column" justifyContent="flex-end" paddingLeft={1} width={Math.min(52, width - columns - 1)}>
+          <Text wrap="truncate">
+            <Text bold color={c.pet}>
+              {pet.name}
+            </Text>
+            <Text color={c.sub}>
+              {' '}
+              · {t.stage[stageOf(pet.xp)]} · {t.xp} {pet.xp}
+              {toNext === null ? '' : `/${pet.xp + toNext}`}
+            </Text>
+          </Text>
+          <Text wrap="truncate">
+            <Text color={c.sub}>{t.short.fullness} </Text>
+            <Text color={pet.fullness < 25 ? c.red : c.green}>{bar(pet.fullness)}</Text>
+            <Text color={c.sub}> {t.short.happiness} </Text>
+            <Text color={pet.happiness < 30 ? c.red : c.pet}>{bar(pet.happiness)}</Text>
+            <Text color={c.sub}> {t.short.energy} </Text>
+            <Text color={pet.energy < 15 ? c.red : c.teal}>{bar(pet.energy)}</Text>
+          </Text>
+          <Text color={actColor} wrap="wrap">
+            {busy ? '● ' : '○ '}Claude {describe(activity, snap.lang)}
+            {busy && activity.turnTools > 0 ? t.tools(activity.turnTools) : ''}
+          </Text>
+          <Text color={c.yellow} wrap="wrap">
+            {spoken || ' '}
+          </Text>
+          {hasButtons && buttons}
+        </Box>
+      </Box>
+    )
+  }
+
+  // One line of stats that never gives way, Claude's activity after it, the buttons under it
+  band = null
+  return (
+    <Box flexDirection="column" width={width}>
+      <Box flexDirection="row">
+        <Box flexShrink={0} flexDirection="row">
+          <Text color={c.pet} bold>
+            {stageOf(pet.xp) === 'egg' ? '(  .  )' : face(mood, 0)}{' '}
+          </Text>
+          <Text>{pet.name} </Text>
+          <Text color={c.sub}>{t.short.fullness}</Text>
+          <Text color={pet.fullness < 25 ? c.red : c.green}>{bar(pet.fullness, 5)} </Text>
+          <Text color={c.sub}>{t.short.happiness}</Text>
+          <Text color={pet.happiness < 30 ? c.red : c.pet}>{bar(pet.happiness, 5)} </Text>
+          <Text color={c.sub}>{t.short.energy}</Text>
+          <Text color={pet.energy < 15 ? c.red : c.teal}>{bar(pet.energy, 5)} </Text>
+          {pet.poop > 0 && <Text color={c.yellow}>{'@'.repeat(pet.poop)} </Text>}
+        </Box>
+        <Text color={spoken ? c.yellow : actColor} wrap="truncate">
+          {spoken || `│ Claude ${describe(activity, snap.lang)}`}
+        </Text>
+      </Box>
+      {hasButtons && buttons}
+    </Box>
+  )
 }
 
 function clock(at: number): string {

@@ -4,7 +4,7 @@ English | [简体中文](README.zh-CN.md)
 
 A pixel pet that lives inside Claude Code, in the spirit of the handheld virtual pets of the '90s. It watches what Claude is doing, grows up on Claude's work, and keeps you company while you code.
 
-A pixel creature drawn with half-block cells (two pixels per terminal cell), animated at ~5 fps straight into the terminal. Original art. The default species is **mallow**, a peach fox kit with petal ears and a tail that grows fluffier; `/pet species` switches to **sprig** (a cream chick with a leaf sprout), **dewdrop** (a dewdrop sprite in a curly drop hat) or **mochi** (the first design, a round orange blob).
+A pixel creature drawn with half-block cells (two pixels per terminal cell), animated at ~5 fps straight into the terminal. Original art. The default species is **mallow**, a peach fox kit with petal ears and a tail that grows fluffier; `/pet species` switches to **sprig** (a cream chick with a leaf sprout), **dewdrop** (a dewdrop sprite in a curly drop hat), **plumcap** (a plum mushroom whose cap grows wavy), **luma** (a fuzzy moth with crescent-moon wings), **mossroll** (a snail carrying a mossy shell), **inkfold** (an origami cat folded from graphite paper), **kilnby** (a terracotta pup with a glazed bib), **tuck** (a shy ghost living in an old quilt) or **mochi** (the first design, a round orange blob).
 
 ![Stages, moods and bubbles, rendered from hooks/pixels.ts](docs/species/mallow.png)
 
@@ -12,7 +12,7 @@ A pixel creature drawn with half-block cells (two pixels per terminal cell), ani
 
 - **Watches Claude.** Every tool call becomes a line the pet understands: reading `foo.ts`, searching `TODO`, running `npm test`, delegating to a subagent, browsing `claude.com`. The pane shows the current activity, how long it has run and how many tools this turn used.
 - **Grows with your work.** Each tool call is 1 XP, each finished turn 2 XP. Egg → baby (10) → child (60) → teen (200) → adult (500), with a toast at every evolution.
-- **Needs care.** Fullness, happiness and energy drift down over time; it poops now and then. Feed, play, clean, put it to bed. Time away is capped and never drops a stat below 15, so coming back is never cruel.
+- **Needs care.** Food, mood and energy drift down over time; it poops now and then. Feed, play, clean, put it to bed, or let it keep its own hours: it dozes off when tired (energy under 20) or late at night (midnight to 6, energy under 50) and gets up rested after the night; woken by hand, it stays up half an hour. Three piles, or going hungry and sad at once, make it sick: it turns green, can't play, and needs its medicine (a `5: 💊Medicine` button appears while it is sick); cleaning alone doesn't cure it. Time away is capped (three piles at most, no stat below 15), so coming back is never cruel.
 - **Keeps you company.** While Claude is idle it chats: late-night reminders to sleep, a nudge to drink water, cheers after a long turn, worry when a tool fails.
 - **Bubbles show Claude's work.** A magnifier for reads and searches, a pencil for edits, a terminal for shell commands, a globe for the web, a list for plans, a mini pet for each subagent. A flashing red **!** when Claude is asking you something or waiting on a plan approval.
 - **It reacts.** Hops and a ✓ when a turn lands, a sweat drop when a tool fails, munching when fed, hearts when played with, Zs when asleep, a flash when it evolves. It wanders around while Claude is idle and comes home when Claude starts working.
@@ -35,13 +35,14 @@ To try it for one session without installing: `git clone https://github.com/Vibe
 | Command | |
 | --- | --- |
 | `/pet` | Open the pet pane (with the pane focused, `ctrl+x tab`: `f` feed, `p` play, `c` clean, `s` sleep/wake) |
-| `/pet feed` · `play` · `clean` · `sleep` | Care without opening the pane |
+| `/pet feed` · `play` · `clean` · `sleep` · `heal` | Care without opening the pane; `heal` gives medicine to a sick pet |
 | `/pet status` | One-line stats |
 | `/pet name <name>` | Rename the pet |
 | `/pet band [full\|mini\|hidden]` | The band above the prompt: pixel scene (8 rows), one line, or off. Without an argument it cycles |
-| `/pet buttons [on\|off]` | Show or hide the band's care buttons (`1: 🍓 Feed  2: 🎾 Play  3: 🧼 Clean  4: 🌙 Sleep`); hiding them saves a row and turns the digit keys off too |
+| `/pet place [above\|below]` | Put the band above the prompt (the default) or under it; the digit keys work only above it |
+| `/pet buttons [on\|off]` | Show or hide the band's care buttons (`1: 🍓Feed` `2: 🎾Play` `3: 🧼Clean` `4: 🌙Sleep`, each a soft-coloured chip); hiding them saves a row and turns the digit keys off too |
 | `/pet keys [on\|off]` | Digits in an empty prompt press the band's buttons: `1` feed, `2` play, `3` clean, `4` sleep. On by default; off gives the digits back to typing |
-| `/pet species [id]` | Switch species: `mallow`, `sprig`, `dewdrop`, `mochi`; without an id, list them |
+| `/pet species [id]` | Switch species: `mallow`, `sprig`, `dewdrop`, `plumcap`, `luma`, `mossroll`, `inkfold`, `kilnby`, `tuck`, `mochi`; without an id, list them |
 | `/pet skin [color\|lcd]` | Colour pixels, or a retro handheld LCD screen in four greens |
 | `/pet lang [zh\|en\|auto]` | The pet's language; `auto` follows Claude Code's `language` setting, then `LC_ALL` / `LC_MESSAGES` / `LANG` |
 | `/pet reset confirm` | Start over from a new egg |
@@ -62,7 +63,7 @@ A Claude Code mod (function hooks plugin). `tool.call`, `turn.start` and `turn.c
 hooks/register.tsx   hooks, pane, band, commands
 hooks/pet.ts         pure pet logic (stats, stages, care, tool → activity)
 hooks/pixels.ts      pixel art: the creature, icons, bubbles, half-block packing
-hooks/species/       the species as pixel bitmaps (mallow, sprig, dewdrop) and their contract
+hooks/species/       the species as pixel bitmaps and their contract
 hooks/text.ts        every word in Chinese and English
 hooks/sprites.ts     text fallback for surfaces without pixels, and bars
 types/index.d.ts     the $.state contract

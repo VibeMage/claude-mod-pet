@@ -57,6 +57,8 @@ test('the band is a pixel scene when wide, one line when narrow', async ($, on) 
   expect(await wide.find({ type: 'Raster', key: 'scene' })).toBeDefined()
   expect((await wide.find({ type: 'Button', key: 'feed' }))?.props.hotkey).toBe('1')
   expect((await wide.find({ type: 'Button', key: 'sleep' }))?.props.hotkey).toBe('4')
+  // Each button sits on its own coloured chip
+  expect((await wide.find({ type: 'Box', key: 'care-feed' }))?.props.backgroundColor).toBeDefined()
   await wide.press({ key: 'clean' })
   expect(await wide.find({ type: 'Text', text: /「.+」/ })).toBeDefined()
   await wide.unmount()
@@ -208,7 +210,7 @@ test('English mode: the pane, the band and the commands speak English', async ($
   expect(await pane.find({ type: 'Text', text: /is searching TODO/ })).toBeDefined()
   expect(await pane.find({ type: 'Text', text: /What Claude is doing/ })).toBeDefined()
   expect(await pane.find({ type: 'Text', text: /baby/ })).toBeDefined()
-  expect((await pane.find({ type: 'Button', key: 'feed' }))?.props.label).toBe('🍓 Feed')
+  expect((await pane.find({ type: 'Button', key: 'feed' }))?.props.label).toBe('🍓Feed')
   expect(await pane.find({ type: 'Text', text: /[一-龥]/ })).toBeUndefined()
   await pane.press({ key: 'clean' })
   expect(await pane.find({ type: 'Text', text: /Already squeaky clean/ })).toBeDefined()
@@ -217,7 +219,7 @@ test('English mode: the pane, the band and the commands speak English', async ($
   for (const bodyColumns of [100, 50]) {
     const band = await mountBand($, 'terminal', bodyColumns)
     expect(await band.find({ type: 'Text', text: /[一-龥]/ })).toBeUndefined()
-    expect((await band.find({ type: 'Button', key: 'sleep' }))?.props.label).toBe('🌙 Sleep')
+    expect((await band.find({ type: 'Button', key: 'sleep' }))?.props.label).toBe('🌙Sleep')
     await band.unmount()
   }
 
@@ -254,4 +256,104 @@ test('hints name the key that works now: a digit while the band takes them, else
   const withoutKeys = await $.command.run({ command: 'pet', args: 'feed' } as never)
   expect(withoutKeys.text).toContain('/pet sleep')
   expect(withoutKeys.text).not.toContain('{')
+})
+
+test('the band moves under the prompt, and the one-line band keeps its stats', async ($, on) => {
+  mock.clock(on, { now: NOON })
+  mock.store(on)
+  on('ui.render', { component: 'AbovePrompt' }, ($, e) => $.ui.resolve(e).Box({}))
+  on('ui.render', { component: 'PromptHint' }, ($, e) => $.ui.resolve(e).Text({ children: ['? for shortcuts'] }))
+  const HINT = { isDraft: false, isWorking: false, hint: '? for shortcuts' }
+  const viewport = { columns: 120, rows: 40 }
+
+  // Above by default: nothing of the pet's under the prompt
+  const hintBefore = await $.ui.mount({ plugin: 'pixipet', surface: 'terminal', component: 'PromptHint', props: HINT, viewport } as never)
+  expect(await hintBefore.find({ type: 'Raster' })).toBeUndefined()
+  await hintBefore.unmount()
+
+  await $.command.run({ command: 'pet', args: 'place below' } as never)
+  const above = await mountBand($, 'terminal')
+  expect(await above.find({ type: 'Raster' })).toBeUndefined()
+  await above.unmount()
+  const below = await $.ui.mount({ plugin: 'pixipet', surface: 'terminal', component: 'PromptHint', props: HINT, viewport } as never)
+  expect(await below.find({ type: 'Raster', key: 'scene' })).toBeDefined()
+  // Under the prompt the digits are not armed: the buttons take clicks only
+  expect((await below.find({ type: 'Button', key: 'feed' }))?.props.hotkey).toBeUndefined()
+  expect(await below.find({ type: 'Text', text: '? for shortcuts' })).toBeDefined()
+  await below.unmount()
+
+  await $.command.run({ command: 'pet', args: 'band mini' } as never)
+  const mini = await $.ui.mount({ plugin: 'pixipet', surface: 'terminal', component: 'PromptHint', props: HINT, viewport } as never)
+  for (const label of ['温饱', '心情', '精力']) expect(await mini.find({ type: 'Text', text: label })).toBeDefined()
+  await mini.unmount()
+})
+
+test('sickness: three piles make it sick, cleaning does not cure it, medicine does', () => {
+  const now = 10 * 60 * 60_000
+  const baby = { ...newPet(0), xp: 20, lastTickAt: 0 }
+  // A long time away: at most three piles, and sick from them
+  const back = decay(baby, now, true)
+  expect(back.poop).toBeLessThanOrEqual(3)
+  const sick = { ...baby, poop: 3 }
+  const ill = decay({ ...sick, lastTickAt: now - 60_000 }, now)
+  expect(ill.isSick).toBe(true)
+  expect(moodOf(ill, 'idle')).toBe('sick')
+
+  const cleaned = care(ill, 'clean').pet
+  expect(cleaned.poop).toBe(0)
+  expect(cleaned.isSick).toBe(true)
+  expect(care(cleaned, 'play').line).toBe('sickPlay')
+
+  const healed = care(cleaned, 'heal')
+  expect(healed.line).toBe('healed')
+  expect(healed.pet.isSick).toBe(false)
+  expect(care(healed.pet, 'heal').line).toBe('healthy')
+})
+
+test('the medicine button shows only while the pet is sick', async ($, on) => {
+  mock.clock(on, { now: NOON })
+  mock.store(on, { pet: { ...newPet(NOON), xp: 30, isSick: true, poop: 3 }, lang: 'zh' })
+  on('ui.render', { component: 'AbovePrompt' }, ($, e) => $.ui.resolve(e).Box({}))
+  on('command.register', () => ({ value: { command: 'pet' } }))
+  // The engine's own side of a session starting
+  on('session.start', ($, e) => ({ cwd: e.cwd }) as never)
+  // The store is read as the session starts
+  await $.session.start({ cwd: '/tmp', surface: 'terminal', isInteractive: true } as never)
+  const band = await mountBand($, 'terminal')
+  const heal = await band.find({ type: 'Button', key: 'heal' })
+  expect(heal?.props.hotkey).toBe('5')
+  await band.press({ key: 'heal' })
+  expect(await band.find({ type: 'Button', key: 'heal' })).toBeUndefined()
+  await band.unmount()
+})
+
+test('bedtime: it dozes off when tired or late at night, and gets up rested after the night', () => {
+  const day = () => 14
+  const night = () => 2
+  // Last woken by hand long ago
+  const grown = { ...newPet(0), xp: 80, fullness: 100, happiness: 100, poop: 0, lastTickAt: 0, wokeAt: -60 * 60_000 }
+
+  // Tired in the daytime: asleep within ten minutes
+  const tired = decay({ ...grown, energy: 21 }, 20 * 60_000, false, day)
+  expect(tired.isAsleep).toBe(true)
+
+  // Late at night it goes to bed with energy to spare
+  expect(decay({ ...grown, energy: 45 }, 10 * 60_000, false, night).isAsleep).toBe(true)
+  expect(decay({ ...grown, energy: 45 }, 10 * 60_000, false, day).isAsleep).toBe(false)
+
+  // Rested by day it wakes; at night it sleeps on, full or not
+  const asleep = { ...grown, energy: 90, isAsleep: true }
+  expect(decay(asleep, 10 * 60_000, false, day).isAsleep).toBe(false)
+  expect(decay(asleep, 10 * 60_000, false, night).isAsleep).toBe(true)
+
+  // Woken by hand, it stays up half an hour before dozing off again
+  const woken = { ...grown, energy: 10, wokeAt: 0 }
+  expect(decay(woken, 20 * 60_000, false, day).isAsleep).toBe(false)
+  expect(decay(woken, 40 * 60_000, false, day).isAsleep).toBe(true)
+
+  // Three hours away from a tired pet: it napped, so it comes back rested
+  const away = decay({ ...grown, energy: 25 }, 3 * 60 * 60_000, true, day)
+  expect(away.energy).toBeGreaterThan(25)
+  // Eggs never sleep
+  expect(decay({ ...newPet(0), energy: 5 }, 30 * 60_000, false, night).isAsleep).toBe(false)
 })

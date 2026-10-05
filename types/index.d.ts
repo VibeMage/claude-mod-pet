@@ -14,6 +14,10 @@ export type Pet = {
   /** Piles to clean, 0..4. */
   poop: number
   isAsleep: boolean
+  /** Sick until it takes its medicine; cleaning alone does not cure it. */
+  isSick: boolean
+  /** When the person last woke it: it stays up a while before dozing off again. */
+  wokeAt: number
   /** Last time decay was applied, ms since the epoch. */
   lastTickAt: number
   /** Counters for the pane's footer. */
@@ -50,6 +54,9 @@ export type Skin = 'color' | 'lcd'
 
 export type BandMode = 'full' | 'mini' | 'hidden'
 
+/** Where the band goes: above the prompt, or under it in the hint line. */
+export type Place = 'above' | 'below'
+
 export type LogEntry = { at: number; text: string }
 
 declare module 'claude-code' {
@@ -61,6 +68,7 @@ declare module 'claude-code' {
       /** A line the pet says, and when it stops saying it. */
       speech: { text: string; until: number } | null
       bandMode: BandMode
+      place: Place
       skin: Skin
       /** Digits 1–4 in an empty prompt press the band's care buttons. */
       hasKeys: boolean

@@ -16,7 +16,7 @@ A pixel creature drawn with half-block cells (two pixels per terminal cell), ani
 - **Keeps you company.** While Claude is idle it chats: late-night reminders to sleep, a nudge to drink water, cheers after a long turn, worry when a tool fails.
 - **Bubbles show Claude's work.** A magnifier for reads and searches, a pencil for edits, a terminal for shell commands, a globe for the web, a list for plans, a mini pet for each subagent. A flashing red **!** when Claude is asking you something or waiting on a plan approval.
 - **It reacts.** Hops and a ✓ when a turn lands, a sweat drop when a tool fails, munching when fed, hearts when played with, Zs when asleep, a flash when it evolves. It wanders around while Claude is idle and comes home when Claude starts working.
-- **Speaks Chinese and English.** It follows Claude Code's `language` setting, then your locale; `/pet lang zh|en` picks one.
+- **Speaks Chinese and English.** It follows Claude Code's `language` setting; `/pet lang zh|en` picks one.
 - **Where to see it:** a pixel band above the prompt (or under it), and a pane (`/pet`); with the band hidden, the status line carries its stats instead. On desktop and other surfaces without pixels it falls back to text.
 
 ## Install
@@ -46,16 +46,17 @@ Type `/pet` and everything is in its pane: care on the front, and **⚙ Settings
 | `/pet keys [on\|off]` | Digits in an empty prompt press the band's buttons: `1` feed, `2` play, `3` clean, `4` sleep. On by default; off gives the digits back to typing |
 | `/pet species [id]` | Switch species: `mallow`, `sprig`, `dewdrop`, `plumcap`, `luma`, `mossroll`, `inkfold`, `kilnby`, `tuck`, `mochi`; without an id, list them |
 | `/pet skin [color\|lcd]` | Colour pixels, or a retro handheld LCD screen in four greens |
-| `/pet lang [zh\|en\|auto]` | The pet's language; `auto` follows Claude Code's `language` setting, then `LC_ALL` / `LC_MESSAGES` / `LANG` |
+| `/pet lang [zh\|en\|auto]` | The pet's language; `auto` follows Claude Code's `language` setting, English when it has none |
 | `/pet reset confirm` | Start over from a new egg |
 
 ## What it reads, stores and sends
 
 Everything stays on your machine. The pet makes no network requests and runs no commands.
 
-- **Reads:** the tool calls and turns of the session (tool name, file names, a Bash command's description or the command itself, a search pattern, a fetched URL's host) to show what Claude is doing; Claude Code's `theme` and `language` settings; the `LC_ALL`, `LC_MESSAGES` and `LANG` environment variables.
+- **Reads:** the tool calls and turns of the session (tool name, file names, a Bash command's description or the command itself, a search pattern, a fetched URL's host) to show what Claude is doing; Claude Code's `theme` and `language` settings. It reads no environment variables and no credentials.
 - **Stores:** the pet's stats and your choices (band, buttons, keys, skin, species, language) in its own plugin store under `~/.claude/plugins/store/`. Nothing about your code or prompts is stored.
 - **Shows:** a band above the prompt, a pane, a status line and toasts. It never changes or blocks a tool call, a prompt or Claude's answer.
+- **Hooks:** `tool.call`, `turn.start` and `turn.complete` to follow what Claude does (each passed on unchanged); `prompt.submit` only to let a sleeping pet roll over when you write to Claude (the prompt is passed on unchanged); `command.run` to answer its own `/pet` command and nothing else; `session.start` / `session.end` to load and save the pet; `ui.render` for the band, the hint line and its pane.
 
 ## How it works
 
@@ -79,6 +80,8 @@ claude plugin validate --strict .
 claude plugin test .
 npx -y tsx scripts/preview.ts all   # renders docs/species/<id>.png for every species
 ```
+
+The concept art in `docs/concepts/` was generated with an image model (the prompts are in `docs/concepts/prompts*.json`, and the images keep their C2PA content credentials); the pixel bitmaps were drawn from it by hand-editing letters in `hooks/species/`.
 
 New species are welcome: [docs/design-brief.md](docs/design-brief.md) is the brief the current ones were drawn from, and `hooks/species/types.ts` is the contract a test holds every species to.
 

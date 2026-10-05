@@ -16,7 +16,7 @@
 - **陪伴。** Claude 空闲时它会自言自语：深夜提醒你睡觉、提醒喝水、长任务结束后夸你辛苦、工具出错时替你担心。
 - **气泡显示 Claude 在干嘛。** 放大镜是在读/搜索，铅笔是在改文件，终端是在跑命令，地球是在上网，清单是在列计划，每个子 agent 是一只迷你小宠物。Claude 向你提问或等你批准计划时，会闪红色的 **!**。
 - **会有反应。** 一轮完成时跳一下并冒 ✓，工具出错时冒汗，喂食时吧唧嘴，玩耍时冒爱心，睡觉时冒 Z，进化时闪光。Claude 空闲时它到处溜达，Claude 开始干活它就回到原位。
-- **会说中文和英文。** 跟随 Claude Code 的 `language` 设置，其次是系统语言；`/pet lang zh|en` 可以手动指定。
+- **会说中文和英文。** 跟随 Claude Code 的 `language` 设置；`/pet lang zh|en` 可以手动指定。
 - **在哪里看：** 输入框上方（或下方）的像素小栏，以及面板（`/pet`）；小栏隐藏时，状态栏会接替显示它的状态。桌面端等不支持像素的界面会退回文字显示。
 
 ## 安装
@@ -46,16 +46,17 @@ claude plugin install pixipet@claude-mod-pet
 | `/pet keys [on\|off]` | 输入框为空时按数字操作小栏按钮：`1` 喂食、`2` 玩耍、`3` 清洁、`4` 睡觉。默认开启；关闭后数字照常输入 |
 | `/pet species [id]` | 换物种：`mallow`、`sprig`、`dewdrop`、`plumcap`、`luma`、`mossroll`、`inkfold`、`kilnby`、`tuck`、`mochi`；不带参数则列出全部 |
 | `/pet skin [color\|lcd]` | 彩色像素，或复古掌机的四色绿液晶屏 |
-| `/pet lang [zh\|en\|auto]` | 宠物的语言；`auto` 跟随 Claude Code 的 `language` 设置，其次是 `LC_ALL` / `LC_MESSAGES` / `LANG` |
+| `/pet lang [zh\|en\|auto]` | 宠物的语言；`auto` 跟随 Claude Code 的 `language` 设置，没有设置时用英文 |
 | `/pet reset confirm` | 重新从一颗蛋开始 |
 
 ## 它读取、保存、发送什么
 
 所有数据都留在本机。宠物不发任何网络请求，也不运行任何命令。
 
-- **读取：** 本会话的工具调用和轮次（工具名、文件名、Bash 命令的描述或命令本身、搜索关键词、访问网址的域名），用来显示 Claude 在做什么；Claude Code 的 `theme` 和 `language` 设置；环境变量 `LC_ALL`、`LC_MESSAGES`、`LANG`。
+- **读取：** 本会话的工具调用和轮次（工具名、文件名、Bash 命令的描述或命令本身、搜索关键词、访问网址的域名），用来显示 Claude 在做什么；Claude Code 的 `theme` 和 `language` 设置。不读取任何环境变量或凭据。
 - **保存：** 宠物数值和你的选项（小栏、按钮、快捷键、皮肤、物种、语言），存在它自己的插件存储 `~/.claude/plugins/store/` 里。不保存任何代码或 prompt 内容。
 - **显示：** 输入框上方的小栏、面板、状态栏和提示。它从不修改或拦截工具调用、prompt 和 Claude 的回答。
+- **使用的 hook：** `tool.call`、`turn.start`、`turn.complete` 用来跟随 Claude 的动作（都原样传下去）；`prompt.submit` 只用来让睡着的宠物在你给 Claude 发消息时翻个身（prompt 原样传下去）；`command.run` 只回答它自己的 `/pet` 命令；`session.start` / `session.end` 用来读取和保存宠物；`ui.render` 用来画小栏、提示行和面板。
 
 ## 原理
 
@@ -79,6 +80,8 @@ claude plugin validate --strict .
 claude plugin test .
 npx -y tsx scripts/preview.ts all   # 为每个物种渲染 docs/species/<id>.png
 ```
+
+`docs/concepts/` 里的概念图是用图像模型生成的（提示词在 `docs/concepts/prompts*.json`，图片保留了 C2PA 内容凭证）；像素位图是照着概念图在 `hooks/species/` 里逐个字母画出来的。
 
 欢迎贡献新物种：现有物种就是按 [docs/design-brief.md](docs/design-brief.md) 画的，`hooks/species/types.ts` 是格式定义，测试会逐个检查每个物种。
 

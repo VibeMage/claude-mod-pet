@@ -49,7 +49,7 @@ const viewAtom = atom({ plugin: 'pixipet', key: 'view' } as const, 'pet' as View
 const isConfirmingResetAtom = atom({ plugin: 'pixipet', key: 'isConfirmingReset' } as const, false)
 const langWantedAtom = atom({ plugin: 'pixipet', key: 'langWanted' } as const, 'auto' as LangWanted)
 
-type $ = EngineInterface
+type Engine = EngineInterface
 
 /** iOS system colours, light or dark with the Claude Code theme. */
 type Palette = {
@@ -72,7 +72,7 @@ const CUPERTINO: Record<'light' | 'dark', Palette> = {
 // Read once per load: the render hooks run often.
 let cached: Palette | undefined
 
-async function palette($: $): Promise<Palette> {
+async function palette($: Engine): Promise<Palette> {
   if (cached !== undefined) return cached
   try {
     cached = String((await $.settings.read()).theme ?? 'dark').includes('light') ? CUPERTINO.light : CUPERTINO.dark
@@ -121,19 +121,19 @@ let refusedAt = -Infinity
 
 // ---- State writes ----
 
-async function changePet($: $, fn: (pet: Pet) => Pet): Promise<Pet> {
+async function changePet($: Engine, fn: (pet: Pet) => Pet): Promise<Pet> {
   let after: Pet | undefined
   await update($, petAtom, pet => (after = fn(pet)))
   snap.pet = after!
   return after!
 }
 
-async function save($: $) {
+async function save($: Engine) {
   await $.store.set(STORE_KEY, await read($, petAtom))
 }
 
 /** Fills `{feed}`, `{play}`, `{clean}` and `{sleep}` with how to do that right now. */
-async function hints($: $, text: string): Promise<string> {
+async function hints($: Engine, text: string): Promise<string> {
   if (!text.includes('{')) return text
   const takesDigits =
     (await read($, bandModeAtom)) !== 'hidden' &&
@@ -146,13 +146,13 @@ async function hints($: $, text: string): Promise<string> {
   )
 }
 
-async function say($: $, text: string, seconds = 8) {
+async function say($: Engine, text: string, seconds = 8) {
   text = await hints($, text)
   const now = await $.clock.now()
   await update($, speechAtom, () => ({ text, until: now + seconds * 1000 }))
 }
 
-async function log($: $, text: string) {
+async function log($: Engine, text: string) {
   const at = await $.clock.now()
   await update($, logAtom, list => [...list, { at, text }].slice(-30))
 }
@@ -161,7 +161,7 @@ async function log($: $, text: string) {
  * The status line carries the pet only while the band is hidden: with the
  * band showing it would say the same thing twice.
  */
-async function refreshStatus($: $) {
+async function refreshStatus($: Engine) {
   if ((await read($, bandModeAtom)) !== 'hidden') {
     $.ui.status(undefined)
     return
@@ -173,7 +173,7 @@ async function refreshStatus($: $) {
   $.ui.status(`${face(mood, 0)} ${pet.name} ${stats} · Claude ${describe(snap.activity, snap.lang)}`)
 }
 
-async function setActivity($: $, next: Partial<Activity>) {
+async function setActivity($: Engine, next: Partial<Activity>) {
   const now = await $.clock.now()
   const before = snap.activity
   let after: Activity | undefined
@@ -183,7 +183,7 @@ async function setActivity($: $, next: Partial<Activity>) {
 }
 
 /** Applies care, says the answer, plays its animation, and persists. */
-async function doCare($: $, what: Care) {
+async function doCare($: Engine, what: Care) {
   const before = snap.pet
   const cared = care(before, what)
   // Woken by hand, it stays up a while before dozing off again
@@ -205,7 +205,7 @@ async function doCare($: $, what: Care) {
 }
 
 /** Evolution check after XP changed. */
-async function checkEvolve($: $, before: Pet, after: Pet) {
+async function checkEvolve($: Engine, before: Pet, after: Pet) {
   const from = stageOf(before.xp)
   const to = stageOf(after.xp)
   if (from === to) return
@@ -287,7 +287,7 @@ function cellsFor(columns: number, rows: number, hasGround: boolean) {
 }
 
 /** Sends a frame only when it differs from the last one the site has. */
-function blit($: $, requestId: string, columns: number, rows: number, cells: string) {
+function blit($: Engine, requestId: string, columns: number, rows: number, cells: string) {
   if (sent.get(requestId) === cells) return
   sent.set(requestId, cells)
   void $.ui.blit({ requestId, key: RASTER, columns, rows, cells }).then(result => {
@@ -302,7 +302,7 @@ function blit($: $, requestId: string, columns: number, rows: number, cells: str
   })
 }
 
-function paint($: $) {
+function paint($: Engine) {
   if (band !== null) blit($, band.id, band.columns, band.rows, cellsFor(band.columns, band.rows, false))
   if (pane !== null) blit($, PANE, pane.columns, pane.rows, cellsFor(pane.columns, pane.rows, true))
 }
@@ -348,7 +348,7 @@ type PaneSite = Parameters<EngineInterface['ui']['resolve']>[0]
  * and tinted; the species a picker; the name a text field; a reset that asks
  * twice. Every choice applies at once and is kept between sessions.
  */
-async function drawSettings($: $, e: PaneSite, cols: number, c: Palette) {
+async function drawSettings($: Engine, e: PaneSite, cols: number, c: Palette) {
   const t = tx()
   const o = t.settings
   const els = $.ui.resolve(e)
@@ -511,22 +511,15 @@ function speciesBlurb(id: string): string {
 
 /**
  * The language: `zh` or `en` as the person chose it, or for `auto` (and
- * nothing chosen) Claude Code's `language` setting, then the locale, then English.
+ * nothing chosen) Claude Code's `language` setting, then English.
  */
-async function resolveLang($: $, wanted: unknown): Promise<Lang> {
+async function resolveLang($: Engine, wanted: unknown): Promise<Lang> {
   if (wanted === 'zh' || wanted === 'en') return wanted
   try {
     const fromSettings = langOf(String((await $.settings.read()).language ?? ''))
     if (fromSettings !== undefined) return fromSettings
   } catch {
-    // No settings to read: go on to the locale
-  }
-  try {
-    const locale = (await $.env.get('LC_ALL')) || (await $.env.get('LC_MESSAGES')) || (await $.env.get('LANG'))
-    const fromLocale = langOf(locale)
-    if (fromLocale !== undefined) return fromLocale
-  } catch {
-    // No environment to read
+    // No settings to read: English
   }
   return 'en'
 }
@@ -542,7 +535,7 @@ function speciesIds(): string[] {
   return [DEFAULT_SPECIES, ...SPECIES.map(sp => sp.id).filter(id => id !== DEFAULT_SPECIES), 'mochi']
 }
 
-async function setBand($: $, mode: BandMode) {
+async function setBand($: Engine, mode: BandMode) {
   await update($, bandModeAtom, () => mode)
   await $.store.set('bandMode', mode)
   if (mode !== 'full') band = null
@@ -550,7 +543,7 @@ async function setBand($: $, mode: BandMode) {
   return mode
 }
 
-async function setPlace($: $, place: Place) {
+async function setPlace($: Engine, place: Place) {
   await update($, placeAtom, () => place)
   await $.store.set('place', place)
   band = null
@@ -558,19 +551,19 @@ async function setPlace($: $, place: Place) {
   return place
 }
 
-async function setButtons($: $, on: boolean) {
+async function setButtons($: Engine, on: boolean) {
   await update($, hasButtonsAtom, () => on)
   await $.store.set('hasButtons', on)
   return on
 }
 
-async function setKeys($: $, on: boolean) {
+async function setKeys($: Engine, on: boolean) {
   await update($, hasKeysAtom, () => on)
   await $.store.set('hasKeys', on)
   return on
 }
 
-async function setSkin($: $, skin: Skin) {
+async function setSkin($: Engine, skin: Skin) {
   await update($, skinAtom, () => skin)
   snap.skin = skin
   await $.store.set('skin', skin)
@@ -578,7 +571,7 @@ async function setSkin($: $, skin: Skin) {
   return skin
 }
 
-async function setSpecies($: $, id: string) {
+async function setSpecies($: Engine, id: string) {
   await update($, speciesAtom, () => id)
   snap.species = id
   await $.store.set('species', id)
@@ -586,8 +579,8 @@ async function setSpecies($: $, id: string) {
   return id
 }
 
-/** `auto` follows Claude Code's language setting, then the locale. */
-async function setLang($: $, wanted: 'zh' | 'en' | 'auto') {
+/** `auto` follows Claude Code's language setting, else English. */
+async function setLang($: Engine, wanted: 'zh' | 'en' | 'auto') {
   await $.store.set('lang', wanted)
   await update($, langWantedAtom, () => wanted)
   snap.lang = await resolveLang($, wanted)
@@ -605,14 +598,14 @@ async function setLang($: $, wanted: 'zh' | 'en' | 'auto') {
   return snap.lang
 }
 
-async function rename($: $, name: string) {
+async function rename($: Engine, name: string) {
   await changePet($, p => ({ ...p, name }))
   await save($)
   await say($, tx().myName(name))
   await refreshStatus($)
 }
 
-async function resetPet($: $) {
+async function resetPet($: Engine) {
   const now = await $.clock.now()
   await changePet($, p => newPet(now, p.name))
   await update($, logAtom, () => [])
@@ -1036,7 +1029,7 @@ type BandSite = Parameters<EngineInterface['ui']['resolve']>[0] & { requestId: s
  * stats beside it, or one line of stats with the buttons under it. Digits
  * press the buttons only above the prompt, where the engine arms them.
  */
-async function drawBand($: $, e: BandSite, width: number, maxRows: number, takesDigits: boolean) {
+async function drawBand($: Engine, e: BandSite, width: number, maxRows: number, takesDigits: boolean) {
   const mode = await read($, bandModeAtom)
   if (mode === 'hidden') {
     band = null

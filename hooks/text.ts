@@ -9,7 +9,7 @@ export type Line =
   | 'egg' | 'asleep' | 'full' | 'fed' | 'tired' | 'played' | 'clean' | 'cleaned' | 'wake' | 'night'
   | 'healed' | 'healthy' | 'sickPlay'
 
-/** Reads a language from a Claude Code `language` setting or a locale (`zh_CN.UTF-8`, `chinese`). */
+/** Reads a language from Claude Code's `language` setting (`chinese`, `zh-CN`, `english`). */
 export function langOf(value: string | undefined): Lang | undefined {
   if (value === undefined || value === '') return undefined
   const v = value.toLowerCase()
@@ -221,7 +221,7 @@ const zh: Text = {
     on ? '小栏按钮已显示' : '小栏按钮已隐藏，数字快捷键也随之停用（/pet buttons on 恢复，也可以用 /pet feed 等命令）',
   skin: skin => (skin === 'lcd' ? '换上了拓麻歌子液晶屏皮肤' : '换回了彩色皮肤'),
   lang: lang => (lang === 'zh' ? '已切换为中文' : 'Switched to English'),
-  langUsage: '用法：/pet lang zh|en|auto（auto 跟随 Claude Code 的 language 设置和系统语言）',
+  langUsage: '用法：/pet lang zh|en|auto（auto 跟随 Claude Code 的 language 设置）',
   resetConfirm: '这会让宠物重新从蛋开始。确定的话输入：/pet reset confirm',
   newEgg: '一颗新蛋出现了',
   eggReady: '新的蛋已就位 🥚',
@@ -381,7 +381,7 @@ const en: Text = {
       : 'Band buttons hidden, and the digit keys with them (/pet buttons on to bring them back, or use /pet feed and friends)',
   skin: skin => (skin === 'lcd' ? 'Switched to the Tamagotchi LCD skin' : 'Back to the colour skin'),
   lang: lang => (lang === 'zh' ? '已切换为中文' : 'Switched to English'),
-  langUsage: "Usage: /pet lang zh|en|auto (auto follows Claude Code's language setting, then the system locale)",
+  langUsage: "Usage: /pet lang zh|en|auto (auto follows Claude Code's language setting)",
   resetConfirm: 'This starts your pet over from an egg. To go ahead: /pet reset confirm',
   newEgg: 'A new egg appeared',
   eggReady: 'A fresh egg is ready 🥚',
